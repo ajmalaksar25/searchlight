@@ -1,0 +1,10 @@
+node_modules/
+dist/
+*.log
+.env
+.env.local
+client_secret*.json
+token.json
+config.json
+.gsc-mcp/
+.DS_Store

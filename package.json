@@ -1,0 +1,48 @@
+{
+  "name": "@ajmalaksar/gsc-mcp",
+  "version": "0.1.0",
+  "description": "Model Context Protocol server for Google Search Console. Query search analytics, inspect URLs, manage sitemaps, and surface SEO opportunities from any MCP client.",
+  "type": "module",
+  "bin": {
+    "gsc-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    ".env.example"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "login": "node dist/index.js login",
+    "status": "node dist/index.js status",
+    "setup": "node dist/index.js setup",
+    "start": "node dist/index.js serve",
+    "test": "npm run build && node --test",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "google-search-console",
+    "seo",
+    "search-analytics",
+    "claude",
+    "llm"
+  ],
+  "author": "Ajmal Aksar",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "googleapis": "^173.0.0",
+    "open": "^11.0.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^26.0.0",
+    "typescript": "^6.0.3"
+  }
+}
