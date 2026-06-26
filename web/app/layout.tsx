@@ -3,7 +3,7 @@ import Link from "next/link";
 import "./globals.css";
 
 const SITE = "https://gsc.ajmalaksar.com";
-const GITHUB = "https://github.com/ajmalaksar/gsc-mcp";
+const GITHUB = "https://github.com/ajmalaksar25/gsc-mcp";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE),

@@ -1,4 +1,4 @@
-const GITHUB = "https://github.com/ajmalaksar/gsc-mcp";
+const GITHUB = "https://github.com/ajmalaksar25/gsc-mcp";
 
 type Feature = { icon: string; title: string; body: string; status: "live" | "soon" };
 

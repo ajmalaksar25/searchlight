@@ -35,6 +35,14 @@
   ],
   "author": "Ajmal Aksar",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ajmalaksar25/gsc-mcp.git"
+  },
+  "homepage": "https://gsc.ajmalaksar.com",
+  "bugs": {
+    "url": "https://github.com/ajmalaksar25/gsc-mcp/issues"
+  },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "googleapis": "^173.0.0",
