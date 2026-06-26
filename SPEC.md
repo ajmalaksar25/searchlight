@@ -572,3 +572,52 @@ This ships under a personal brand, so each phase is designed to be a post:
 - **`audit_page`** — before/after OG previews across six platforms; the "GSC tells you *what*, this tells you *how*" framing.
 - **The loopback OAuth write-up** — evergreen explainer + portfolio piece.
 - **SEO/E‑E‑A‑T/GEO scores on a live site** — a screenshot-friendly dashboard, with the honest "E‑E‑A‑T isn't a direct ranking factor" caveat that builds credibility.
+
+---
+
+## 22. Expanded scope (v3): full analytics, pro-grade audit, and auto-fix
+
+The goal widened: **one login connects everything** (Search Console + Analytics + speed), the assessment matches what **professional SEO agencies** deliver, and — because the user runs this in an agent (Claude Code) with their site's repo open — the system can **diagnose *and* fix**. This section captures that; it supersedes any narrower framing above where they conflict.
+
+### 22.1 What pro audits cover — and our coverage
+A 2026 agency-grade audit spans six layers. Where gsc-mcp stands:
+
+| Layer | What pros assess | Status |
+| --- | --- | --- |
+| **Technical** | crawl/index, architecture, internal links, duplicates, structured data, AI-readability | coverage ✅, `diagnose_site` ✅ |
+| **On-page** | titles (<60), metas (~155), one H1, keyword placement | `audit_page` ⏳ |
+| **Content / E‑E‑A‑T** | first-hand experience, author/date/sources, depth | `audit_page` + scoring ⏳ |
+| **Core Web Vitals** | LCP / INP (decisive in 2026) / CLS on top pages | PSI/CrUX ⏳ |
+| **Backlinks** | profile + competitor gap | ❌ not in GSC API — 3rd-party/defer |
+| **Local** | Google Business Profile + citations | ❌ separate API — future |
+| **AI / LLM visibility (GEO)** | schema, extractable answers, citability | `ai-seo` skill ⏳ |
+
+### 22.2 Analytics layer (GA4) — "one login, full analytics"
+- Add the **`analytics.readonly`** (sensitive) scope to the bundled OAuth client → users re-consent once; verification then covers two sensitive scopes (still no security assessment). The MCP becomes the single connection hub.
+- GA4 **Data API** (`google.analyticsdata`) + **Admin API** (list properties). Tools: traffic by channel (organic vs paid vs direct vs referral), users/sessions/engagement, top landing pages, conversions/events, and a **GSC↔GA join** (search query → on-site behavior).
+- **Setup-gap detection:** flag pages missing the GA4 tag (scan page HTML for the `gtag`/GA4 snippet during `audit_page`) → "these pages aren't measured — here's how to add it."
+
+### 22.3 The fix layer — diagnose → map to code → fix
+The real differentiator: not just *what's wrong* but *fixed*.
+- **MCP diagnoses** (data + why + where). **The agent (Claude) + the `gsc-seo` skill apply fixes** in the user's connected project repo — the MCP itself never edits arbitrary files (security); the agent does, guided by the skill.
+- **Framework-aware, not hardcoded:** detect the stack (Next.js, Astro, Nuxt, SvelteKit, plain HTML, CMS export…) and apply idiomatic fixes:
+  - broken redirect (e.g. `/blog`) → correct the rule (`next.config`/`vercel.json`/middleware);
+  - sitemap 307/missing → generate or fix the sitemap route so it returns 200 with canonical URLs;
+  - robots 4xx on a subdomain → add/fix the robots handler;
+  - missing canonical → self-referencing canonical in metadata/head;
+  - missing GA4 tag → inject the snippet;
+  - thin/unindexed content → expand (delegate to `seo-content-writer`).
+- **Verify loop:** after each fix, re-run `diagnose_site` / `inspect_url` to confirm. The diagnosis→code mapping is heuristic knowledge in the skill, kept general.
+- **Non-code sites** (hosted CMS, no repo): give exact step-by-step instructions + deep links instead of editing.
+
+### 22.4 The ecosystem
+`MCP (data + diagnosis + analytics)` → `skill (persona-aware judgment + fix orchestration)` → `UI (MCP Apps widget + dashboard, navigable health view)` → `outcome (measured improvement vs the tracked baseline)`. One login; accessible to zero-experience users; agency-grade depth.
+
+### 22.5 Honest gaps
+- **Backlinks**: no GSC API — needs a third party (Ahrefs/Majestic/etc.) or defer; say so.
+- **Local/GBP**: separate API; future.
+- **Request-indexing / removals**: not general-API; deep-link + instructions.
+- **Auto-fix** needs the repo connected; otherwise instructions, not edits.
+
+### 22.6 Roadmap delta
+Re-prioritized after Phase 2: **Phase 3** `audit_page` + PSI/CrUX → **Phase 3.5** GA4 analytics layer (+ scope re-consent) → **Phase 4** scores + the **fix skill** (diagnose→code→fix→verify) → **Phase 5** MCP UI + dashboard. Commit/push per slice.
