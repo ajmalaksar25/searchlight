@@ -59,12 +59,58 @@ const FEATURES: Feature[] = [
   },
 ];
 
+type Milestone = { phase: string; title: string; body: string; status: "shipped" | "building" | "planned" };
+
+const ROADMAP: Milestone[] = [
+  {
+    phase: "Phase 1",
+    title: "Core Search Console",
+    body: "Search analytics, opportunity finder, URL inspection, sitemaps and multi-site — over MCP and the CLI.",
+    status: "shipped",
+  },
+  {
+    phase: "Phase 2",
+    title: "Coverage reconstruction",
+    body: "Rebuild the 'Page indexing' report Google won't export in bulk — cached, URL-by-URL, within quota.",
+    status: "building",
+  },
+  {
+    phase: "Phase 3",
+    title: "On-page audits + page speed",
+    body: "Fetch a live page for concrete fixes (titles, meta, Open Graph, structured data) plus Core Web Vitals from PageSpeed and CrUX.",
+    status: "planned",
+  },
+  {
+    phase: "Phase 4",
+    title: "Scores & site report",
+    body: "SEO, E-E-A-T and GEO scores with a prioritized, shareable report — your single source of truth.",
+    status: "planned",
+  },
+  {
+    phase: "Phase 5",
+    title: "Local dashboard",
+    body: "A private dashboard to see coverage, scores and audits at a glance — reading the same data your AI client does.",
+    status: "planned",
+  },
+  {
+    phase: "Phase 6",
+    title: "One-click onboarding",
+    body: "Hosted 'sign in with Google' and a one-click install, so anyone can connect their sites in seconds.",
+    status: "planned",
+  },
+];
+
+const STATUS_LABEL: Record<Milestone["status"], string> = {
+  shipped: "Shipped",
+  building: "In progress",
+  planned: "Planned",
+};
+
 export default function Home() {
   return (
     <>
       <section className="hero">
         <div className="container">
-          <span className="eyebrow">● Open source · MCP server · build-in-public</span>
           <h1>
             Google Search Console as an <span className="grad">SEO copilot</span> for AI.
           </h1>
@@ -115,7 +161,34 @@ export default function Home() {
         </div>
       </section>
 
-      <section id="privacy" style={{ borderTop: "1px solid var(--border-soft)" }}>
+      <section id="roadmap" style={{ borderTop: "1px solid var(--border-soft)" }}>
+        <div className="container">
+          <div className="section-head">
+            <span className="kicker">Roadmap</span>
+            <h2>What&apos;s shipped, and what&apos;s coming.</h2>
+            <p>Built in public, one phase at a time — Phase 1 is live today.</p>
+          </div>
+          <ol className="timeline">
+            {ROADMAP.map((m) => (
+              <li className={`tl-item ${m.status}`} key={m.phase}>
+                <span className="tl-dot" />
+                <div className="tl-body">
+                  <div className="tl-head">
+                    <span className="tl-phase">{m.phase}</span>
+                    <span className={`badge ${m.status === "planned" ? "soon" : "live"}`}>
+                      {STATUS_LABEL[m.status]}
+                    </span>
+                  </div>
+                  <h3>{m.title}</h3>
+                  <p>{m.body}</p>
+                </div>
+              </li>
+            ))}
+          </ol>
+        </div>
+      </section>
+
+      <section id="local-first" style={{ borderTop: "1px solid var(--border-soft)" }}>
         <div className="container split">
           <div className="section-head">
             <span className="kicker">Local-first &amp; private</span>

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Logo, GitHubIcon } from "@/components/icons";
 import "./globals.css";
 
 const SITE = "https://gsc.ajmalaksar.com";
@@ -46,14 +47,15 @@ function Header() {
     <header className="site-header">
       <div className="container nav">
         <Link href="/" className="brand">
-          <span className="dot" /> gsc-mcp
+          <Logo /> <span>gsc-mcp</span>
         </Link>
         <nav className="nav-links">
-          <a href="#features">Features</a>
-          <a href="#privacy">Privacy</a>
-          <Link href="/privacy">Legal</Link>
-          <a className="btn btn-primary" href={GITHUB} target="_blank" rel="noopener noreferrer">
-            GitHub
+          <a href="/#features">Features</a>
+          <a href="/#roadmap">Roadmap</a>
+          <Link href="/privacy">Privacy</Link>
+          <Link href="/terms">Terms</Link>
+          <a className="btn btn-ghost" href={GITHUB} target="_blank" rel="noopener noreferrer">
+            <GitHubIcon /> GitHub
           </a>
         </nav>
       </div>
@@ -65,13 +67,22 @@ function Footer() {
   return (
     <footer className="site-footer">
       <div className="container foot">
-        <span className="copy">© {2026} Ajmal Aksar · MIT licensed</span>
-        <div className="links">
-          <Link href="/privacy">Privacy</Link>
-          <Link href="/terms">Terms</Link>
-          <a href={GITHUB} target="_blank" rel="noopener noreferrer">
-            GitHub
-          </a>
+        <div className="foot-brand">
+          <Logo size={22} />
+          <div>
+            <div className="foot-name">gsc-mcp</div>
+            <div className="foot-tag">Google Search Console, as an SEO copilot for AI.</div>
+          </div>
+        </div>
+        <div className="foot-right">
+          <div className="links">
+            <Link href="/privacy">Privacy</Link>
+            <Link href="/terms">Terms</Link>
+            <a href={GITHUB} target="_blank" rel="noopener noreferrer">
+              GitHub
+            </a>
+          </div>
+          <span className="copy">© 2026 Ajmal Aksar · MIT licensed</span>
         </div>
       </div>
     </footer>
