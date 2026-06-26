@@ -5,6 +5,7 @@ import { register as sites } from "./sites.js";
 import { register as analytics } from "./analytics.js";
 import { register as insights } from "./insights.js";
 import { register as inspection } from "./inspection.js";
+import { register as coverage } from "./coverage.js";
 import { register as sitemaps } from "./sitemaps.js";
 import type { ToolModule } from "./shared.js";
 
@@ -19,6 +20,7 @@ const MODULES: ToolModule[] = [
   analytics,
   insights,
   inspection,
+  coverage,
   sitemaps,
 ];
 

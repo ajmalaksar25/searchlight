@@ -60,9 +60,11 @@ gsc-mcp sites default blog
 ```
 In chat: `use_site` switches the active property; `account_overview` gives a portfolio view across all properties.
 
-## Tools (Phase 1)
+## Tools
 
-`auth_status`, `auth_login`, `list_sites`, `use_site`, `get_active_site`, `set_default_site`, `account_overview`, `gsc_deep_link`, `query_search_analytics`, `top_queries`, `top_pages`, `find_opportunities`, `compare_periods`, `inspect_url`, `list_sitemaps`, `get_sitemap`. With `GSC_ENABLE_WRITE=1`: `submit_sitemap`, `delete_sitemap`.
+`auth_status`, `auth_login`, `list_sites`, `use_site`, `get_active_site`, `set_default_site`, `account_overview`, `gsc_deep_link`, `query_search_analytics`, `top_queries`, `top_pages`, `find_opportunities`, `compare_periods`, `inspect_url`, `coverage_report`, `refresh_coverage`, `get_pages_in_bucket`, `list_sitemaps`, `get_sitemap`. With `GSC_ENABLE_WRITE=1`: `submit_sitemap`, `delete_sitemap`.
+
+**Coverage report** (`refresh_coverage` → `coverage_report` → `get_pages_in_bucket`) reconstructs the "Page indexing" report the GSC API won't export in bulk: it gathers candidate URLs from your sitemaps and analytics, inspects them within the 2,000/day per-property quota (resumable), caches the results under `~/.gsc-mcp/sites/`, and buckets them by index status.
 
 ## Develop & extend
 
