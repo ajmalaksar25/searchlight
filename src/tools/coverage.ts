@@ -116,4 +116,44 @@ export const register: ToolModule = (server, ctx) => {
       }
     }
   );
+
+  server.registerTool(
+    "refresh_all_coverage",
+    {
+      title: "Refresh coverage for all sites",
+      description:
+        "Advance the coverage crawl for EVERY accessible property in one call — keep your whole portfolio's " +
+        "Page-indexing data fresh without naming each site. Runs sites sequentially, quota-aware per property. " +
+        "Resumable: call again to keep filling in pending URLs.",
+      inputSchema: {
+        maxUrlsPerSite: z
+          .number()
+          .int()
+          .min(1)
+          .max(2000)
+          .optional()
+          .describe("Max URLs to inspect per site this run. Default 100."),
+      },
+    },
+    async ({ maxUrlsPerSite }) => {
+      try {
+        const gsc = await ctx.gsc();
+        const res = await gsc.sites.list();
+        const sites = (res.data.siteEntry ?? [])
+          .map((s) => s.siteUrl)
+          .filter((u): u is string => Boolean(u));
+        const results = [];
+        for (const siteUrl of sites) {
+          try {
+            results.push(await refreshCoverage(siteUrl, maxUrlsPerSite ?? 100));
+          } catch (e) {
+            results.push({ siteUrl, error: e instanceof Error ? e.message : String(e) });
+          }
+        }
+        return ok({ sitesCrawled: results.length, results });
+      } catch (e) {
+        return fail(e);
+      }
+    }
+  );
 };

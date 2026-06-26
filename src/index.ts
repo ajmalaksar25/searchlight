@@ -7,7 +7,10 @@ import {
   addAlias,
   removeAlias,
   setDefaultSite,
+  resolveAlias,
 } from "./config.js";
+import { gscClient } from "./gsc.js";
+import { refreshCoverage } from "./coverage.js";
 
 const USAGE = `gsc-mcp - Google Search Console SEO copilot (MCP server)
 
@@ -21,6 +24,9 @@ Usage:
                              sites add <alias> <siteUrl>
                              sites remove <alias>
                              sites default <alias|siteUrl>
+  gsc-mcp crawl            Crawl coverage headlessly (schedulable):
+                             crawl <alias|siteUrl> [--max N]
+                             crawl --all [--max N]
   gsc-mcp serve            Start the MCP server over stdio (default)
 
 Add it to an MCP client by running \`gsc-mcp serve\` (or just \`gsc-mcp\`).`;
@@ -95,6 +101,47 @@ function manageSites(args: string[]): void {
   }
 }
 
+async function crawl(args: string[]): Promise<void> {
+  const all = args.includes("--all");
+  const maxIdx = args.indexOf("--max");
+  const max = maxIdx >= 0 ? Math.max(1, parseInt(args[maxIdx + 1] ?? "100", 10) || 100) : 100;
+  const positional: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === "--max") {
+      i++;
+      continue;
+    }
+    if (args[i] === "--all") continue;
+    positional.push(args[i]);
+  }
+
+  let sites: string[];
+  if (all) {
+    const gsc = await gscClient();
+    const res = await gsc.sites.list();
+    sites = (res.data.siteEntry ?? []).map((s) => s.siteUrl).filter((u): u is string => Boolean(u));
+  } else {
+    const target = positional[0];
+    if (!target) {
+      throw new Error("Usage: gsc-mcp crawl <alias|siteUrl> [--max N]  |  gsc-mcp crawl --all [--max N]");
+    }
+    sites = [resolveAlias(target)];
+  }
+
+  for (const siteUrl of sites) {
+    console.error(`\nCrawling ${siteUrl} (max ${max})...`);
+    try {
+      const p = await refreshCoverage(siteUrl, max);
+      console.error(
+        `  inspected ${p.inspectedThisRun}, errors ${p.errors}, pending ${p.pendingAfter}, quota ${p.quotaUsedToday}/${p.quotaPerDay}`
+      );
+      console.error(`  ${p.note}`);
+    } catch (e) {
+      console.error(`  Error: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+}
+
 async function main(): Promise<void> {
   const cmd = process.argv[2];
   switch (cmd) {
@@ -113,6 +160,9 @@ async function main(): Promise<void> {
       break;
     case "sites":
       manageSites(process.argv.slice(3));
+      break;
+    case "crawl":
+      await crawl(process.argv.slice(3));
       break;
     case "-h":
     case "--help":
