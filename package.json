@@ -8,6 +8,7 @@
   },
   "files": [
     "dist",
+    "bundled-client.json",
     "README.md",
     ".env.example"
   ],

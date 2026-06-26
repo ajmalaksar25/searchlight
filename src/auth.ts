@@ -39,11 +39,30 @@ interface ClientCreds {
 }
 
 /**
+ * Read the bundled Tier-1 client shipped with the package (gitignored in source,
+ * included in the npm tarball). Lives at the package root, one level above dist/.
+ */
+function readBundledClientFile(): ClientCreds | null {
+  try {
+    const raw = JSON.parse(
+      fs.readFileSync(new URL("../bundled-client.json", import.meta.url), "utf8")
+    );
+    const block = raw.installed || raw.web || raw;
+    if (block?.client_id && block?.client_secret) {
+      return { clientId: block.client_id, clientSecret: block.client_secret };
+    }
+  } catch {
+    /* no bundled client present */
+  }
+  return null;
+}
+
+/**
  * Resolve the OAuth client credentials (Tier 0 bring-your-own, Tier 1 bundled).
  * Precedence (see SPEC §5.5/§5.6):
  *   1. GSC_OAUTH_CLIENT_ID + GSC_OAUTH_CLIENT_SECRET
  *   2. GSC_OAUTH_CREDENTIALS = path to client_secret.json (installed|web block)
- *   3. bundled Tier-1 client (GSC_BUNDLED_CLIENT_ID/SECRET, set at build time)
+ *   3. bundled Tier-1 client: GSC_BUNDLED_CLIENT_ID/SECRET, then bundled-client.json
  */
 function loadClientCredentials(): ClientCreds {
   const id = process.env.GSC_OAUTH_CLIENT_ID;
@@ -62,6 +81,9 @@ function loadClientCredentials(): ClientCreds {
   const bundledId = process.env.GSC_BUNDLED_CLIENT_ID;
   const bundledSecret = process.env.GSC_BUNDLED_CLIENT_SECRET;
   if (bundledId && bundledSecret) return { clientId: bundledId, clientSecret: bundledSecret };
+
+  const bundledFile = readBundledClientFile();
+  if (bundledFile) return bundledFile;
 
   throw new Error(
     "Missing OAuth client credentials. Set GSC_OAUTH_CLIENT_ID and GSC_OAUTH_CLIENT_SECRET, " +

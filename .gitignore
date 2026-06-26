@@ -4,6 +4,7 @@ dist/
 .env
 .env.local
 client_secret*.json
+bundled-client.json
 token.json
 config.json
 .gsc-mcp/
