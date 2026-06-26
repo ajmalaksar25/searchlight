@@ -4,6 +4,7 @@ import fs from "node:fs";
 import { google } from "googleapis";
 import open from "open";
 import { CONFIG_DIR, TOKEN_PATH } from "./config.js";
+import { pagespeedApiKey } from "./keys.js";
 
 /**
  * OAuth types are derived from `googleapis` itself rather than imported from
@@ -30,7 +31,7 @@ export function hasToken(): boolean {
 }
 
 export function pageSpeedKeySet(): boolean {
-  return Boolean(process.env.GSC_PAGESPEED_API_KEY);
+  return Boolean(pagespeedApiKey());
 }
 
 interface ClientCreds {

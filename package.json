@@ -9,6 +9,7 @@
   "files": [
     "dist",
     "bundled-client.json",
+    "bundled-keys.json",
     "README.md",
     ".env.example"
   ],
@@ -22,6 +23,7 @@
     "status": "node dist/index.js status",
     "setup": "node dist/index.js setup",
     "start": "node dist/index.js serve",
+    "keys:sync": "node scripts/sync-keys.mjs",
     "test": "npm run build && node --test",
     "prepublishOnly": "npm run build"
   },
