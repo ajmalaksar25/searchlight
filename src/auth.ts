@@ -33,9 +33,21 @@ function analyticsEnabled(): boolean {
   return !/^(1|true|yes|on)$/i.test(process.env.GSC_DISABLE_ANALYTICS || "");
 }
 
+// Tier-2 setup scopes (only requested when GSC_ENABLE_SETUP is on). Least
+// privilege: no tagmanager.manage.users / delete.containers.
+const SETUP_SCOPES = [
+  "https://www.googleapis.com/auth/siteverification",
+  "https://www.googleapis.com/auth/analytics.edit",
+  "https://www.googleapis.com/auth/tagmanager.edit.containers",
+  "https://www.googleapis.com/auth/tagmanager.manage.accounts",
+  "https://www.googleapis.com/auth/tagmanager.publish",
+];
+
 export function scopes(): string[] {
-  const s = [writeEnabled() ? WRITE_SCOPE : READONLY_SCOPE];
+  // Setup mode needs Search Console write (sites.add, sitemap submit) too.
+  const s = [writeEnabled() || setupEnabled() ? WRITE_SCOPE : READONLY_SCOPE];
   if (analyticsEnabled()) s.push(ANALYTICS_SCOPE);
+  if (setupEnabled()) s.push(...SETUP_SCOPES);
   return s;
 }
 
