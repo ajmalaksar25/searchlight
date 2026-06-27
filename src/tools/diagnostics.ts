@@ -3,6 +3,7 @@ import {
   hasToken,
   scopes,
   writeEnabled,
+  setupEnabled,
   pageSpeedKeySet,
   setupState,
   login,
@@ -26,8 +27,9 @@ export const register: ToolModule = (server, ctx) => {
       const { state, nextStep } = setupState();
       return ok({
         authenticated: authed,
-        scope: scopes()[0],
+        scopes: scopes(),
         writeEnabled: writeEnabled(),
+        setupMode: setupEnabled(),
         tokenPath: TOKEN_PATH,
         activeSite: ctx.getActiveSite() ?? null,
         defaultSite: defaultSite() ?? null,

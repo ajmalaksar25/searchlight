@@ -29,6 +29,12 @@ Usage:
                              crawl --all [--max N]
   gsc-mcp serve            Start the MCP server over stdio (default)
 
+Flags (no env vars needed — pass these in your MCP client's args, e.g.
+["serve", "--setup"], and use the same flag when running \`login\`):
+  --setup          Enable setup mode (GA4 / GTM / verification provisioning)
+  --write          Enable Search Console write tools (sitemap submit/delete)
+  --no-analytics   Don't request the Google Analytics scope
+
 Add it to an MCP client by running \`gsc-mcp serve\` (or just \`gsc-mcp\`).`;
 
 function printStatus(): void {
@@ -142,8 +148,36 @@ async function crawl(args: string[]): Promise<void> {
   }
 }
 
+/**
+ * Parse global flags (an easier alternative to env vars — usable in an MCP
+ * client's args array, e.g. ["serve", "--setup"]) and apply them by setting the
+ * matching env var, then return argv with those flags removed.
+ */
+function applyGlobalFlags(argv: string[]): string[] {
+  const rest: string[] = [];
+  for (const a of argv) {
+    switch (a) {
+      case "--setup":
+      case "--enable-setup":
+        process.env.GSC_ENABLE_SETUP = "1";
+        break;
+      case "--write":
+      case "--enable-write":
+        process.env.GSC_ENABLE_WRITE = "1";
+        break;
+      case "--no-analytics":
+        process.env.GSC_DISABLE_ANALYTICS = "1";
+        break;
+      default:
+        rest.push(a);
+    }
+  }
+  return rest;
+}
+
 async function main(): Promise<void> {
-  const cmd = process.argv[2];
+  const argv = applyGlobalFlags(process.argv.slice(2));
+  const cmd = argv[0];
   switch (cmd) {
     case "login":
       await login();
@@ -159,10 +193,10 @@ async function main(): Promise<void> {
       printSetup();
       break;
     case "sites":
-      manageSites(process.argv.slice(3));
+      manageSites(argv.slice(1));
       break;
     case "crawl":
-      await crawl(process.argv.slice(3));
+      await crawl(argv.slice(1));
       break;
     case "-h":
     case "--help":

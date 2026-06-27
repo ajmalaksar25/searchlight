@@ -21,23 +21,24 @@ GSC_OAUTH_CLIENT_ID=xxx GSC_OAUTH_CLIENT_SECRET=yyy npx -y @ajmalaksar/gsc-mcp l
 ```
 A browser opens; approve access. The token is stored at `~/.gsc-mcp/token.json` (mode 0600). You can also let Claude do this in-conversation with the `auth_login` tool.
 
-**3. Add to your MCP client** (Claude Desktop / generic):
+**3. Add to your MCP client** (Claude Desktop / generic) — no env vars needed:
 ```json
 {
   "mcpServers": {
     "gsc": {
       "command": "npx",
-      "args": ["-y", "@ajmalaksar/gsc-mcp", "serve"],
-      "env": {
-        "GSC_OAUTH_CLIENT_ID": "xxx",
-        "GSC_OAUTH_CLIENT_SECRET": "yyy",
-        "GSC_DEFAULT_SITE": "sc-domain:example.com"
-      }
+      "args": ["-y", "@ajmalaksar/gsc-mcp", "serve"]
     }
   }
 }
 ```
 Claude Code one-liner: `claude mcp add gsc -- npx -y @ajmalaksar/gsc-mcp serve`.
+
+**Flags (instead of env vars).** Toggle modes by adding a flag to `args` — no env file to edit:
+- `--setup` → setup mode (GA4 / GTM / verification provisioning), e.g. `"args": ["-y", "@ajmalaksar/gsc-mcp", "serve", "--setup"]`
+- `--write` → Search Console write tools · `--no-analytics` → skip the Analytics scope
+
+Use the same flag when signing in so the right scopes are requested: `gsc-mcp login --setup`.
 
 ## CLI
 
