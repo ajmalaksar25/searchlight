@@ -55,6 +55,16 @@ export function hasToken(): boolean {
   return fs.existsSync(TOKEN_PATH);
 }
 
+/** Scopes actually granted in the stored token (its space-separated `scope` field). */
+export function grantedScopes(): string[] {
+  try {
+    const t = JSON.parse(fs.readFileSync(TOKEN_PATH, "utf8"));
+    return typeof t.scope === "string" ? t.scope.split(/\s+/).filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+}
+
 export function pageSpeedKeySet(): boolean {
   return Boolean(pagespeedApiKey());
 }
@@ -232,7 +242,7 @@ export async function login(): Promise<LoginResult> {
       "https://myaccount.google.com/permissions and log in again.";
   if (warning) console.error("\nWarning: " + warning);
   console.error(`\n✓ Authenticated. Token stored at ${TOKEN_PATH}`);
-  console.error(`  Active scope: ${scopes()[0]}`);
+  console.error(`  Scopes granted (${scopes().length}): ${scopes().map((s) => s.split("/auth/")[1]).join(", ")}`);
 
   return {
     ok: true,

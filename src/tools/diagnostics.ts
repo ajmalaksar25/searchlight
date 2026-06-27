@@ -2,6 +2,7 @@ import { ok, fail } from "../util/result.js";
 import {
   hasToken,
   scopes,
+  grantedScopes,
   writeEnabled,
   setupEnabled,
   pageSpeedKeySet,
@@ -27,7 +28,7 @@ export const register: ToolModule = (server, ctx) => {
       const { state, nextStep } = setupState();
       return ok({
         authenticated: authed,
-        scopes: scopes(),
+        scopes: grantedScopes().length ? grantedScopes() : scopes(),
         writeEnabled: writeEnabled(),
         setupMode: setupEnabled(),
         tokenPath: TOKEN_PATH,

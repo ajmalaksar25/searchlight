@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { login, logout, hasToken, TOKEN_PATH, scopes, setupState } from "./auth.js";
+import { login, logout, hasToken, TOKEN_PATH, scopes, grantedScopes, setupState } from "./auth.js";
 import { startServer } from "./server.js";
 import {
   loadConfig,
@@ -37,12 +37,19 @@ Flags (no env vars needed — pass these in your MCP client's args, e.g.
 
 Add it to an MCP client by running \`gsc-mcp serve\` (or just \`gsc-mcp\`).`;
 
+function scopeSummary(): string {
+  const granted = grantedScopes();
+  const list = granted.length ? granted : scopes();
+  const names = list.map((s) => s.split("/auth/")[1] ?? s).join(", ");
+  return `${list.length} ${granted.length ? "granted" : "configured"} (${names})`;
+}
+
 function printStatus(): void {
   const { state, nextStep } = setupState();
   const lines = [
     hasToken() ? "Authenticated." : "Not authenticated.",
     `  Token:    ${TOKEN_PATH}`,
-    `  Scope:    ${scopes()[0]}`,
+    `  Scopes:   ${scopeSummary()}`,
     `  Default:  ${defaultSite() ?? "(none)"}`,
     `  Setup:    ${state} — ${nextStep}`,
   ];
