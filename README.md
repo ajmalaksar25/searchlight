@@ -63,9 +63,11 @@ In chat: `use_site` switches the active property; `account_overview` gives a por
 
 ## Tools
 
-`auth_status`, `auth_login`, `list_sites`, `use_site`, `get_active_site`, `set_default_site`, `account_overview`, `gsc_deep_link`, `query_search_analytics`, `top_queries`, `top_pages`, `find_opportunities`, `compare_periods`, `inspect_url`, `coverage_report`, `refresh_coverage`, `get_pages_in_bucket`, `list_sitemaps`, `get_sitemap`. With `GSC_ENABLE_WRITE=1`: `submit_sitemap`, `delete_sitemap`.
+`auth_status`, `auth_login`, `list_sites`, `use_site`, `get_active_site`, `set_default_site`, `account_overview`, `gsc_deep_link`, `query_search_analytics`, `top_queries`, `top_pages`, `find_opportunities`, `compare_periods`, `inspect_url`, `coverage_report`, `refresh_coverage`, `get_pages_in_bucket`, `diagnose_site`, `snapshot_baseline`, `list_snapshots`, `progress_report`, `list_sitemaps`, `get_sitemap`. With `GSC_ENABLE_WRITE=1`: `submit_sitemap`, `delete_sitemap`.
 
 **Coverage report** (`refresh_coverage` → `coverage_report` → `get_pages_in_bucket`) reconstructs the "Page indexing" report the GSC API won't export in bulk: it gathers candidate URLs from your sitemaps and analytics, inspects them within the 2,000/day per-property quota (resumable), caches the results under `~/.gsc-mcp/sites/`, and buckets them by index status.
+
+**Baseline & progress** (`snapshot_baseline` → … fix things … → `snapshot_baseline` → `progress_report`) freeze a site's `diagnose_site` health (score, indexed counts, 28-day traffic, the actionable issue list) on a given day under `~/.gsc-mcp/sites/<hash>/snapshots/<date>.json`, then diff two days into a plain-English report of what improved — which issues were resolved, which are new, and how the score and traffic moved. This makes before→after provable.
 
 ## Develop & extend
 

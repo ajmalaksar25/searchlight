@@ -9,4 +9,5 @@ bundled-keys.json
 token.json
 config.json
 .gsc-mcp/
+.lean-ctx/
 .DS_Store

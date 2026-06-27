@@ -662,3 +662,13 @@ A skill that runs the flow end-to-end: **detect gaps** (`diagnose_site` + `audit
 - **Verification is not fully automatable.** Methods: `FILE`/`META` (URL-prefix only — automatable by injecting into the repo), `ANALYTICS`/`TAG_MANAGER` (if already installed), `DNS_TXT`/`DNS_CNAME` (needs the user's DNS access).
 - **Domain properties (`sc-domain:`) can ONLY be verified by DNS.** So for domain properties we cannot auto-verify — we surface the exact TXT record and host-specific steps (e.g. Cloudflare) and let the user paste it. URL-prefix properties can be auto-verified via the repo.
 - **The setup skill must ask before it acts.** It runs a confirmed interview, not a silent provisioning: *which site? analytics yes/no? create a new GA4 property or connect an existing one? which Analytics account? GTM or just the gtag snippet? what do you want to track (key events/conversions)? is the code in a repo I can edit, or hosted?* → produces a plan → **confirms** → executes → re-verifies. It never creates accounts/properties or edits code without explicit confirmation, and explains what each step does and why.
+
+## 24. Baseline snapshots and progress reports (provable before→after)
+
+The north star is a tracked **baseline → improvement** loop. `diagnose_site` answers "how healthy is this site *right now*"; snapshots make that longitudinal so we can prove a fix worked rather than just assert it.
+
+- **`snapshot_baseline`** — freezes today's `diagnose_site` output (health score + grade, indexed/not-indexed/inspected counts, 28-day clicks/impressions/top-queries, and the actionable critical+warning finding list) to `~/.gsc-mcp/sites/<hash>/snapshots/<YYYY-MM-DD>.json`. Re-running on the same UTC day overwrites that day (a fresh read of "today"). Capture one **before** changing anything.
+- **`list_snapshots`** — the dates available for a property (oldest→newest), so the user can pick two to compare.
+- **`progress_report`** — diffs two snapshots (defaults oldest→newest; accepts explicit `from`/`to`). Reports score/grade movement, indexed/traffic deltas, and findings matched by their stable `id` into **resolved** (gone), **new** (appeared), and **persisting** (still present) — plus an honest plain-English headline (including "no measurable change" when nothing moved).
+
+Findings are matched on the same stable ids `diagnose_site` already emits (e.g. `coverage:<state>`, `robots:<host>`, `sitemap:unreadable`), so resolving a real issue shows up as a resolved finding with no per-site special-casing. Read-only and local — registered in all tiers, no extra scopes. Backed by `src/snapshot.ts` (pure capture/diff) + `src/tools/snapshot.ts`.

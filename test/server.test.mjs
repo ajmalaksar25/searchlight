@@ -78,6 +78,9 @@ test("server registers the Phase-1 tool surface and keeps stdout clean", async (
     "find_opportunities",
     "inspect_url",
     "list_sitemaps",
+    "snapshot_baseline",
+    "list_snapshots",
+    "progress_report",
   ]) {
     assert.ok(tools.includes(name), `missing tool: ${name}`);
   }
