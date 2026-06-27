@@ -17,13 +17,21 @@ export type Credentials = Parameters<OAuth2Client["setCredentials"]>[0];
 
 const READONLY_SCOPE = "https://www.googleapis.com/auth/webmasters.readonly";
 const WRITE_SCOPE = "https://www.googleapis.com/auth/webmasters";
+const ANALYTICS_SCOPE = "https://www.googleapis.com/auth/analytics.readonly";
 
 export function writeEnabled(): boolean {
   return /^(1|true|yes|on)$/i.test(process.env.GSC_ENABLE_WRITE || "");
 }
 
+/** Analytics is included by default (one login = GSC + GA). Opt out with GSC_DISABLE_ANALYTICS. */
+function analyticsEnabled(): boolean {
+  return !/^(1|true|yes|on)$/i.test(process.env.GSC_DISABLE_ANALYTICS || "");
+}
+
 export function scopes(): string[] {
-  return [writeEnabled() ? WRITE_SCOPE : READONLY_SCOPE];
+  const s = [writeEnabled() ? WRITE_SCOPE : READONLY_SCOPE];
+  if (analyticsEnabled()) s.push(ANALYTICS_SCOPE);
+  return s;
 }
 
 export function hasToken(): boolean {
