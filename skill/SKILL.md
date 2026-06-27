@@ -28,6 +28,7 @@ Summarize their answers as a short plan and get a yes before executing.
 - `diagnose_site <site>` → triaged health (fix-now / worth-improving / fine / working) with why + what-to-do.
 - `refresh_coverage <site>` then `coverage_report` → which pages are/aren't indexed and why (run once to populate).
 - For key pages: `audit_page <url>` → title/meta/canonical/H1/OG/schema/alt/content-depth + **GA tag presence**.
+- If a GA4 property exists but the tag is missing: `ga_measurement_id <site>` → **fetch the `G-XXXX` ID automatically** (don't ask the user to paste it). Only ask for it if no property matches the site and none is being created.
 - `page_speed <url>` → Core Web Vitals.
 - `ga_traffic` / `top_pages` / `find_opportunities` → is anyone arriving, and from where.
 
@@ -53,7 +54,7 @@ Detect the stack (`audit_page` reports `framework`; or read the repo). Apply the
 - **Redirects:** `next.config` / `vercel.json` / middleware — collapse loops to one hop.
 - **Canonical / meta / OG image / lang / viewport:** the framework's head/metadata API.
 - **Structured data:** add JSON-LD for the page type (Article/Product/FAQ).
-- **GA4 tag (gtag):** inject the snippet from `create_ga4_property` (or the existing measurement ID) into the site head/layout.
+- **GA4 tag (gtag):** get the measurement ID from `create_ga4_property` (new property) or `ga_measurement_id` (existing property — fetch it, don't ask the user to paste it), then inject the gtag snippet into the site head/layout, consent-gated if the site has a consent banner (mirror the existing analytics setup, e.g. a Clarity component).
 After editing, **re-deploy is the user's step** unless they ask you to (e.g. `vercel deploy`); then verify.
 
 ## 5. Verify and report

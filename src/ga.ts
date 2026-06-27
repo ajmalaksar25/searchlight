@@ -73,6 +73,57 @@ export async function listProperties(): Promise<GaProperty[]> {
   return out;
 }
 
+/** Bare host for matching: strip scheme, path, and a leading www. */
+function hostOf(siteUrl: string): string {
+  if (siteUrl.startsWith("sc-domain:")) return siteUrl.slice("sc-domain:".length).replace(/^www\./, "");
+  try {
+    return new URL(siteUrl).host.replace(/^www\./, "");
+  } catch {
+    return siteUrl.replace(/^www\./, "");
+  }
+}
+
+export interface MeasurementStream {
+  streamId: string;
+  displayName: string;
+  measurementId: string; // G-XXXXXXX
+  defaultUri: string;
+}
+
+/** Web data-stream Measurement IDs (G-XXXX) for an existing GA4 property. */
+export async function listMeasurementIds(propertyId: string): Promise<MeasurementStream[]> {
+  const admin = await gaAdmin();
+  const res = await admin.properties.dataStreams.list({ parent: `properties/${propertyId}` });
+  const out: MeasurementStream[] = [];
+  for (const s of res.data.dataStreams ?? []) {
+    const mid = s.webStreamData?.measurementId;
+    if (!mid) continue; // only web streams carry a Measurement ID
+    out.push({
+      streamId: (s.name ?? "").split("/").pop() ?? "",
+      displayName: s.displayName ?? "",
+      measurementId: mid,
+      defaultUri: s.webStreamData?.defaultUri ?? "",
+    });
+  }
+  return out;
+}
+
+/** Find the GA4 property whose web stream URL matches a site (host-wise, www-insensitive). */
+export async function resolvePropertyForSite(siteUrl: string): Promise<GaProperty | null> {
+  const host = hostOf(siteUrl);
+  const props = await listProperties();
+  const match = props.find((p) =>
+    p.urls.some((u) => {
+      try {
+        return new URL(u).host.replace(/^www\./, "") === host;
+      } catch {
+        return false;
+      }
+    })
+  );
+  return match ?? null;
+}
+
 export interface GaReportRow {
   [key: string]: string | number;
 }

@@ -64,7 +64,7 @@ In chat: `use_site` switches the active property; `account_overview` gives a por
 
 ## Tools
 
-`auth_status`, `auth_login`, `list_sites`, `use_site`, `get_active_site`, `set_default_site`, `account_overview`, `gsc_deep_link`, `query_search_analytics`, `top_queries`, `top_pages`, `find_opportunities`, `compare_periods`, `inspect_url`, `coverage_report`, `refresh_coverage`, `get_pages_in_bucket`, `diagnose_site`, `snapshot_baseline`, `list_snapshots`, `progress_report`, `list_sitemaps`, `get_sitemap`. With `GSC_ENABLE_WRITE=1`: `submit_sitemap`, `delete_sitemap`.
+`auth_status`, `auth_login`, `list_sites`, `use_site`, `get_active_site`, `set_default_site`, `account_overview`, `gsc_deep_link`, `query_search_analytics`, `top_queries`, `top_pages`, `find_opportunities`, `compare_periods`, `inspect_url`, `coverage_report`, `refresh_coverage`, `get_pages_in_bucket`, `diagnose_site`, `snapshot_baseline`, `list_snapshots`, `progress_report`, `ga_list_properties`, `ga_measurement_id`, `ga_traffic`, `ga_top_pages`, `ga_report`, `list_sitemaps`, `get_sitemap`. With `GSC_ENABLE_WRITE=1`: `submit_sitemap`, `delete_sitemap`.
 
 **Coverage report** (`refresh_coverage` → `coverage_report` → `get_pages_in_bucket`) reconstructs the "Page indexing" report the GSC API won't export in bulk: it gathers candidate URLs from your sitemaps and analytics, inspects them within the 2,000/day per-property quota (resumable), caches the results under `~/.gsc-mcp/sites/`, and buckets them by index status.
 
