@@ -652,3 +652,13 @@ Most setup is **code (Tier 3) + read scopes (Tier 1) + a couple of guided one-cl
 
 ### 23.4 The `/seo-setup` skill
 A skill that runs the flow end-to-end: **detect gaps** (`diagnose_site` + `audit_page` checks for: GSC verified? GA4 tag present? GTM? sitemap reachable+submitted? robots ok? canonical? ) → **provision** what the active tier allows → **fix the repo** (framework-aware) → **submit + verify**. Idempotent; asks before account-level or destructive actions; persona-aware (beginner vs pro). The MCP supplies the data and (in setup mode) the provisioning tools; the skill + agent do the orchestration and code edits.
+
+### 23.5 GCP APIs to enable (per capability)
+- **Already needed:** Search Console API, PageSpeed Insights API, Chrome UX Report API.
+- **For the GA layer (Tier 1 read):** **Google Analytics Data API** *and* **Google Analytics Admin API** — both must be enabled in the Cloud project, in addition to re-login with `analytics.readonly`, or the `ga_*` tools return "API not enabled".
+- **For setup mode (Tier 2):** **Site Verification API** and **Tag Manager API** (GA4 property creation is covered by the Analytics Admin API above).
+
+### 23.6 Verification reality + the guided interview
+- **Verification is not fully automatable.** Methods: `FILE`/`META` (URL-prefix only — automatable by injecting into the repo), `ANALYTICS`/`TAG_MANAGER` (if already installed), `DNS_TXT`/`DNS_CNAME` (needs the user's DNS access).
+- **Domain properties (`sc-domain:`) can ONLY be verified by DNS.** So for domain properties we cannot auto-verify — we surface the exact TXT record and host-specific steps (e.g. Cloudflare) and let the user paste it. URL-prefix properties can be auto-verified via the repo.
+- **The setup skill must ask before it acts.** It runs a confirmed interview, not a silent provisioning: *which site? analytics yes/no? create a new GA4 property or connect an existing one? which Analytics account? GTM or just the gtag snippet? what do you want to track (key events/conversions)? is the code in a repo I can edit, or hosted?* → produces a plan → **confirms** → executes → re-verifies. It never creates accounts/properties or edits code without explicit confirmation, and explains what each step does and why.
