@@ -621,3 +621,34 @@ The real differentiator: not just *what's wrong* but *fixed*.
 
 ### 22.6 Roadmap delta
 Re-prioritized after Phase 2: **Phase 3** `audit_page` + PSI/CrUX → **Phase 3.5** GA4 analytics layer (+ scope re-consent) → **Phase 4** scores + the **fix skill** (diagnose→code→fix→verify) → **Phase 5** MCP UI + dashboard. Commit/push per slice.
+
+---
+
+## 23. Access tiers and the `/seo-setup` skill (zero-to-configured)
+
+Setting a site up *from scratch* needs more than read access. We tier it so the public app stays easy to verify while power users can opt into full automation.
+
+### 23.1 Access tiers
+| Tier | Access | Enables | Verification cost |
+| --- | --- | --- | --- |
+| **0** | PSI / CrUX **API key** | page speed, Core Web Vitals | none |
+| **1 (default)** | `webmasters.readonly` + `analytics.readonly` | diagnose, audit, report (read everything) | low (2 sensitive scopes) |
+| **2 (opt-in "setup mode")** | + `webmasters` (write), `siteverification`, `analytics.edit`, `tagmanager.edit.containers` / `manage.accounts` / `publish` | add+verify a GSC site, submit sitemaps, create a GA4 property+stream, create/publish a GTM container | high (many sensitive/edit scopes) |
+| **3 (repo)** | Claude Code filesystem — **no Google scope** | inject GA4/GTM snippet, generate sitemap/robots, fix canonical/redirects, add structured data | n/a |
+
+### 23.2 Zero-to-configured flow (a site with nothing set up)
+1. **GSC** — `sites.add` + verify ownership via the **Site Verification API** (HTML-file/meta method: token injected into the repo).
+2. **GA4** — create a property + web data stream via the **Admin API** (`analytics.edit`) → measurement ID. *Caveat: the API creates properties under an existing Analytics **account**; it cannot create a new account — guide the user for that one step.*
+3. **GTM** (optional) — create a container (`tagmanager.edit.containers`) → GTM ID. Or skip GTM and use `gtag` directly.
+4. **Repo (Tier 3)** — inject the GA4/GTM snippet, generate sitemap + robots, add canonical, fix redirects, add schema.
+5. **Submit** the sitemap to GSC (`webmasters`).
+6. **Verify** — re-run `diagnose_site` until green.
+
+### 23.3 The recommended balance — don't over-scope
+Most setup is **code (Tier 3) + read scopes (Tier 1) + a couple of guided one-click Google actions** — not full edit-scope automation. So:
+- **Public verified app = Tier 1 (read-only).** Easy verification, safe consent.
+- **Setup is performed mostly via repo edits + guidance**, with **Tier 2 provisioning as an explicit opt-in** (`GSC_ENABLE_SETUP`, separate consent / bring-your-own client). E.g. GA4: either create via `analytics.edit` (opt-in) *or* guide the user to create it and paste the measurement ID (no edit scope needed).
+- Rationale: every added scope makes verification harder and the consent scarier. Keep the default minimal; gate power behind opt-in.
+
+### 23.4 The `/seo-setup` skill
+A skill that runs the flow end-to-end: **detect gaps** (`diagnose_site` + `audit_page` checks for: GSC verified? GA4 tag present? GTM? sitemap reachable+submitted? robots ok? canonical? ) → **provision** what the active tier allows → **fix the repo** (framework-aware) → **submit + verify**. Idempotent; asks before account-level or destructive actions; persona-aware (beginner vs pro). The MCP supplies the data and (in setup mode) the provisioning tools; the skill + agent do the orchestration and code edits.
