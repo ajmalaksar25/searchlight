@@ -636,6 +636,8 @@ Setting a site up *from scratch* needs more than read access. We tier it so the 
 | **2 (opt-in "setup mode")** | + `webmasters` (write), `siteverification`, `analytics.edit`, `tagmanager.edit.containers` / `manage.accounts` / `publish` | add+verify a GSC site, submit sitemaps, create a GA4 property+stream, create/publish a GTM container | high (many sensitive/edit scopes) |
 | **3 (repo)** | Claude Code filesystem — **no Google scope** | inject GA4/GTM snippet, generate sitemap/robots, fix canonical/redirects, add structured data | n/a |
 
+**Flag design (frictionless rule).** A user should make exactly one decision: *look* or *change*. Default is read-only (Tier 1). **`--setup` is the single "change" flag** — it turns on provisioning (Tier 2) **and** Search Console writes (sitemap submit/delete); `writeEnabled()` folds in `setupEnabled()`. The narrower `--write` still exists (write tools without provisioning) for power users, but `--setup` never requires also passing `--write`. Rationale: setup mode already requests the full `webmasters` scope, so the old split produced a setup mode that couldn't finish setup — the blind test (zawaaj.in) hit exactly this. Don't reintroduce a state where the user must reason about flag combinations.
+
 ### 23.2 Zero-to-configured flow (a site with nothing set up)
 1. **GSC** — `sites.add` + verify ownership via the **Site Verification API** (HTML-file/meta method: token injected into the repo).
 2. **GA4** — create a property + web data stream via the **Admin API** (`analytics.edit`) → measurement ID. *Caveat: the API creates properties under an existing Analytics **account**; it cannot create a new account — guide the user for that one step.*

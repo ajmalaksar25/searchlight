@@ -46,7 +46,8 @@ export const register: ToolModule = (server, ctx) => {
     }
   );
 
-  // Write tools register only when GSC_ENABLE_WRITE is set.
+  // Write tools register when GSC_ENABLE_WRITE is set OR in setup mode
+  // (writeEnabled() folds in setupEnabled()).
   if (!writeEnabled()) return;
 
   server.registerTool(

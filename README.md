@@ -35,8 +35,9 @@ A browser opens; approve access. The token is stored at `~/.gsc-mcp/token.json` 
 Claude Code one-liner: `claude mcp add gsc -- npx -y @ajmalaksar/gsc-mcp serve`.
 
 **Flags (instead of env vars).** Toggle modes by adding a flag to `args` — no env file to edit:
-- `--setup` → setup mode (GA4 / GTM / verification provisioning), e.g. `"args": ["-y", "@ajmalaksar/gsc-mcp", "serve", "--setup"]`
-- `--write` → Search Console write tools · `--no-analytics` → skip the Analytics scope
+- `--setup` → **full setup mode**: GA4 / GTM / verification provisioning **and** Search Console writes (sitemap submit/verify). This is the one flag you want for `/seo-setup` — it's self-sufficient, e.g. `"args": ["-y", "@ajmalaksar/gsc-mcp", "serve", "--setup"]`
+- `--write` → Search Console write tools *only* (sitemap submit/delete), without provisioning. `--setup` already implies this.
+- `--no-analytics` → skip the Analytics scope
 
 Use the same flag when signing in so the right scopes are requested: `gsc-mcp login --setup`.
 

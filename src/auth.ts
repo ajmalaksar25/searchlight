@@ -19,13 +19,19 @@ const READONLY_SCOPE = "https://www.googleapis.com/auth/webmasters.readonly";
 const WRITE_SCOPE = "https://www.googleapis.com/auth/webmasters";
 const ANALYTICS_SCOPE = "https://www.googleapis.com/auth/analytics.readonly";
 
-export function writeEnabled(): boolean {
-  return /^(1|true|yes|on)$/i.test(process.env.GSC_ENABLE_WRITE || "");
-}
-
 /** Setup/provisioning mode — registers the tools that create GA4/GTM/verification. */
 export function setupEnabled(): boolean {
   return /^(1|true|yes|on)$/i.test(process.env.GSC_ENABLE_SETUP || "");
+}
+
+/**
+ * Search Console write tools (sitemap submit/delete, sites.add). Setup mode
+ * implies write: provisioning inherently changes things and already requests the
+ * full `webmasters` scope, so `--setup` alone must be enough to complete setup —
+ * a user shouldn't have to also know to pass `--write`. See SPEC §23.
+ */
+export function writeEnabled(): boolean {
+  return setupEnabled() || /^(1|true|yes|on)$/i.test(process.env.GSC_ENABLE_WRITE || "");
 }
 
 /** Analytics is included by default (one login = GSC + GA). Opt out with GSC_DISABLE_ANALYTICS. */
@@ -44,8 +50,8 @@ const SETUP_SCOPES = [
 ];
 
 export function scopes(): string[] {
-  // Setup mode needs Search Console write (sites.add, sitemap submit) too.
-  const s = [writeEnabled() || setupEnabled() ? WRITE_SCOPE : READONLY_SCOPE];
+  // writeEnabled() already accounts for setup mode (sites.add, sitemap submit).
+  const s = [writeEnabled() ? WRITE_SCOPE : READONLY_SCOPE];
   if (analyticsEnabled()) s.push(ANALYTICS_SCOPE);
   if (setupEnabled()) s.push(...SETUP_SCOPES);
   return s;
