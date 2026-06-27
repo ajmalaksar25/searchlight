@@ -55,7 +55,11 @@ Detect the stack (`audit_page` reports `framework`; or read the repo). Apply the
 - **Canonical / meta / OG image / lang / viewport:** the framework's head/metadata API.
 - **Structured data:** add JSON-LD for the page type (Article/Product/FAQ).
 - **GA4 tag (gtag):** get the measurement ID from `create_ga4_property` (new property) or `ga_measurement_id` (existing property — fetch it, don't ask the user to paste it), then inject the gtag snippet into the site head/layout, consent-gated if the site has a consent banner (mirror the existing analytics setup, e.g. a Clarity component).
-After editing, **re-deploy is the user's step** unless they ask you to (e.g. `vercel deploy`); then verify.
+**Deploy it — don't hand it back.** Code edits only reach the live site on the next build, so the run isn't done until it's deployed. Detect the method and do it (confirm ONCE upfront, since it changes the live site, then run without re-prompting):
+- **Vercel + git auto-deploy** (the common case): `git add` the edits, commit with a clear message, and `git push` — Vercel builds on push. Confirm the branch is the production branch first.
+- **Vercel CLI** (linked `.vercel`/no git auto-deploy): `vercel --prod`.
+- **Other hosts:** run the project's build/deploy command if there is one; otherwise tell the user the exact command.
+Then verify against the deployed URL (below).
 
 ## 5. Verify and report
 Re-run `diagnose_site` / `inspect_url` / `audit_page` to confirm each fix resolved. Report what changed, what's still pending (and why — e.g. "Google will re-crawl in a few days"), and the next-best action. If a baseline snapshot exists, show before→after.
