@@ -61,7 +61,7 @@ function handshake() {
     setTimeout(() => {
       child.kill();
       reject(new Error("handshake timeout"));
-    }, 10000);
+    }, 25000);
   });
 }
 

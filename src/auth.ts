@@ -23,6 +23,11 @@ export function writeEnabled(): boolean {
   return /^(1|true|yes|on)$/i.test(process.env.GSC_ENABLE_WRITE || "");
 }
 
+/** Setup/provisioning mode — registers the tools that create GA4/GTM/verification. */
+export function setupEnabled(): boolean {
+  return /^(1|true|yes|on)$/i.test(process.env.GSC_ENABLE_SETUP || "");
+}
+
 /** Analytics is included by default (one login = GSC + GA). Opt out with GSC_DISABLE_ANALYTICS. */
 function analyticsEnabled(): boolean {
   return !/^(1|true|yes|on)$/i.test(process.env.GSC_DISABLE_ANALYTICS || "");

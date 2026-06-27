@@ -10,6 +10,7 @@ import { register as diagnose } from "./diagnose.js";
 import { register as audit } from "./audit.js";
 import { register as speed } from "./speed.js";
 import { register as ga } from "./ga.js";
+import { register as setup } from "./setup.js";
 import { register as sitemaps } from "./sitemaps.js";
 import type { ToolModule } from "./shared.js";
 
@@ -29,6 +30,7 @@ const MODULES: ToolModule[] = [
   audit,
   speed,
   ga,
+  setup,
   sitemaps,
 ];
 
