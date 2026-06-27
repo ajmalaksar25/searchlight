@@ -24,7 +24,8 @@ Ask only what you need, in plain language, and confirm before doing anything:
 Summarize their answers as a short plan and get a yes before executing.
 
 ## 2. Detect — build the picture
-- `setup_status <site>` → GSC verified? matching GA4 property? sitemap submitted?
+- **First, before any fix: `snapshot_baseline <site>`.** This freezes today's health so the before→after is real data, not reconstructed after the fact. Always capture it at the start of a run — don't leave it as an afterthought.
+- `setup_status <site>` → GSC verified? matching GA4 property? sitemap submitted? Also confirms `setupMode`/`writeEnabled`.
 - `diagnose_site <site>` → triaged health (fix-now / worth-improving / fine / working) with why + what-to-do.
 - `refresh_coverage <site>` then `coverage_report` → which pages are/aren't indexed and why (run once to populate).
 - For key pages: `audit_page <url>` → title/meta/canonical/H1/OG/schema/alt/content-depth + **GA tag presence**.
@@ -52,6 +53,7 @@ Order the work by impact (fix blockers before discovery before polish). For each
 Detect the stack (`audit_page` reports `framework`; or read the repo). Apply the idiomatic fix:
 - **Sitemap/robots:** Next.js → `app/sitemap.ts` / `app/robots.ts`; Astro → `@astrojs/sitemap`; etc. Ensure 200 + canonical (www vs non-www) URLs.
 - **Redirects:** `next.config` / `vercel.json` / middleware — collapse loops to one hop.
+- **Canonical host (www vs apex):** the live redirect must agree with the code's canonical (a split where the deployment redirects one way but `metadataBase`/canonicals point the other causes "Duplicate without user-selected canonical"). Fix at the layer that actually enforces it: if it's a **platform/domain setting** (e.g. Vercel) and the **Vercel CLI is available**, set the primary domain + redirect direction via the CLI (check `vercel domains --help` / `vercel --help` at runtime for the exact subcommand rather than assuming a flag); otherwise enforce it in code (`next.config` redirects / middleware). Pick ONE canonical host and make redirect + canonical + sitemap URLs all use it.
 - **Canonical / meta / OG image / lang / viewport:** the framework's head/metadata API.
 - **Structured data:** add JSON-LD for the page type (Article/Product/FAQ).
 - **GA4 tag (gtag):** get the measurement ID from `create_ga4_property` (new property) or `ga_measurement_id` (existing property — fetch it, don't ask the user to paste it), then inject the gtag snippet into the site head/layout, consent-gated if the site has a consent banner (mirror the existing analytics setup, e.g. a Clarity component).
@@ -62,7 +64,7 @@ Detect the stack (`audit_page` reports `framework`; or read the repo). Apply the
 Then verify against the deployed URL (below).
 
 ## 5. Verify and report
-Re-run `diagnose_site` / `inspect_url` / `audit_page` to confirm each fix resolved. Report what changed, what's still pending (and why — e.g. "Google will re-crawl in a few days"), and the next-best action. If a baseline snapshot exists, show before→after.
+Re-run `diagnose_site` / `inspect_url` / `audit_page` to confirm each fix resolved — verify in-browser / against the deployed URL, don't just claim it. Then **capture an "after": `snapshot_baseline <site>` again, and run `progress_report <site>`** to diff against the baseline from §2 — that's the real, repeatable before→after (resolved / new / persisting issues + score & traffic deltas), not a hand-built table. Report what changed, what's still **pending external systems** and why (Google re-crawl ~days; GA "active" flag ~48h; these delays are identical for manual or automated, so they don't count against setup time), and the next-best action.
 
 ## Honesty rules
 - Say what the tool **can't** see or do (no backlinks API; removals/manual-actions are UI-only → deep-link; DNS verification needs the user; new GA/GTM **accounts** can't be API-created).
