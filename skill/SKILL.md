@@ -33,7 +33,7 @@ then ask whether to fix. `setup` / `fix` change real things and always confirm f
 Ask only what you need, in plain language, and confirm before doing anything:
 - **Which site?** (`list_sites`; resolve an alias or pick.)
 - **What's the goal?** (rank a new site / fix indexing / add analytics / general audit.)
-- **Analytics:** do they want it? Create a **new** GA4 property or connect an **existing** one? (`ga_list_properties` to see what exists.) Under which account? (`list_ga_accounts`.) GTM, or just the direct gtag snippet? (Recommend gtag unless they specifically want Tag Manager.)
+- **Analytics:** do they want it? Create a **new** GA4 property or connect an **existing** one? (`ga_list_properties` to see what exists.) Under which account? (`list_ga_accounts`.) Searchlight installs the GA4 tag directly via the gtag snippet.
 - **What do they want to track?** (key events/conversions — keep it simple for beginners.)
 - **Code in this repo, or hosted?**
 
@@ -62,7 +62,6 @@ Order the work by impact (fix blockers before discovery before polish). For each
 
 ### Provisioning (setup mode only — confirm each; these are real, account-level)
 - **GA4:** `list_ga_accounts` → `create_ga4_property` (returns measurement ID + gtag snippet). Prefer connecting an existing clean per-site property; if only Firebase-default/junk properties exist, recommend creating one clean property per site (don't auto-delete — guide the user to remove stale ones).
-- **GTM (only if chosen):** `list_gtm_accounts` → `create_gtm_container`. Needs an existing GTM account (one-time user click). Adding the GA4 tag inside GTM + publishing is currently manual.
 - **Verification (new sites):** `get_verification_token` → for **domain properties** (`sc-domain:`) this is a **DNS TXT record the user must add** (give the exact value + their host's steps, e.g. Cloudflare, DNS-only) → `verify_site`. For URL-prefix, inject the meta/file into the repo and verify.
 
 ## 4. Fix in the repo — framework-aware, not hardcoded

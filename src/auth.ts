@@ -39,14 +39,11 @@ function analyticsEnabled(): boolean {
   return !/^(1|true|yes|on)$/i.test(env("DISABLE_ANALYTICS") || "");
 }
 
-// Tier-2 setup scopes (only requested when SEARCHLIGHT_ENABLE_SETUP is on). Least
-// privilege: no tagmanager.manage.users / delete.containers.
+// Tier-2 setup scopes (only requested when SEARCHLIGHT_ENABLE_SETUP is on). GA4 is
+// installed via the direct gtag snippet, so no Tag Manager scopes are requested.
 const SETUP_SCOPES = [
   "https://www.googleapis.com/auth/siteverification",
   "https://www.googleapis.com/auth/analytics.edit",
-  "https://www.googleapis.com/auth/tagmanager.edit.containers",
-  "https://www.googleapis.com/auth/tagmanager.manage.accounts",
-  "https://www.googleapis.com/auth/tagmanager.publish",
 ];
 
 export function scopes(): string[] {

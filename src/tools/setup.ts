@@ -7,8 +7,6 @@ import {
   createGa4Property,
   getVerificationToken,
   verifySite,
-  listGtmAccounts,
-  createGtmContainer,
 } from "../provision.js";
 import { siteUrlOptional, SITE_URL_DESC, type ToolModule } from "./shared.js";
 
@@ -175,41 +173,5 @@ export const register: ToolModule = (server, ctx) => {
     }
   );
 
-  server.registerTool(
-    "list_gtm_accounts",
-    {
-      title: "List Google Tag Manager accounts",
-      description: "List GTM accounts you can create containers under.",
-      inputSchema: {},
-    },
-    async () => {
-      try {
-        return ok(await listGtmAccounts());
-      } catch (e) {
-        return fail(e);
-      }
-    }
-  );
-
-  server.registerTool(
-    "create_gtm_container",
-    {
-      title: "Create a GTM container",
-      description:
-        "Create a web Google Tag Manager container and return the GTM ID + install snippet. Confirm with the user " +
-        "first. (Adding the GA4 tag inside the container + publishing is a follow-up.)",
-      inputSchema: {
-        accountId: z.string().describe("GTM account ID (from list_gtm_accounts)."),
-        name: z.string().describe("Container name, e.g. the site domain."),
-      },
-    },
-    async ({ accountId, name }) => {
-      try {
-        return ok(await createGtmContainer(accountId, name));
-      } catch (e) {
-        return fail(e);
-      }
-    }
-  );
   void SITE_URL_DESC;
 };
