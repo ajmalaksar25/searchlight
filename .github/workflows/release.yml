@@ -1,0 +1,35 @@
+name: Release
+
+# Publishes to npm whenever a GitHub Release is published, keeping GitHub
+# releases and npm versions in lockstep. Flow: bump the version in package.json,
+# tag it (vX.Y.Z), create a GitHub Release for that tag, and this publishes it.
+#
+# Requires a repo secret NPM_TOKEN (an npm automation token with publish rights
+# for the @ajmalaksar scope). Note: the gitignored bundled-client.json /
+# bundled-keys.json are not present in CI, so CI-published tarballs ship without
+# the Tier-1 bundled client (users fall back to bring-your-own). Publish locally
+# if you intend to bundle those.
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # npm provenance
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: node --test
+      - run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

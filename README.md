@@ -1,47 +1,143 @@
+<div align="center">
+
 # Searchlight
 
-An autonomous technical-SEO and analytics agent, delivered as a Model Context Protocol (MCP) server for any MCP client (Claude Code, Codex, Cursor, …). It reads your real Google Search Console and Analytics data, finds what is broken (indexing, canonical, redirect, sitemap, speed, on-page), explains it in plain language with a worry-level, then fixes it in your repository, deploys, and verifies the fix is live.
+**Technical SEO that fixes itself.**
 
-> **Status: the Search Console + Analytics + diagnosis layers and the guided `/seo-setup` skill are built and working** (validated end-to-end on a live site). Coverage reconstruction, scoring, and a dashboard are on the roadmap — see [SPEC.md](./SPEC.md).
+An autonomous technical-SEO and analytics agent, delivered as a Model Context Protocol (MCP)
+server. Point it at your site: it finds what's broken, explains it in plain language, fixes it
+in your repository, deploys, and verifies the fix is live.
 
-## Install & connect (Tier 0: bring-your-own Google client)
+[Website](https://searchlight.ajmalaksar.com) ·
+[The `/searchlight` skill](#the-searchlight-skill) ·
+[Quickstart](#quickstart) ·
+[Tools](#tools)
 
-A hosted "just sign in" client is coming; for now you create a one-time Google Cloud client.
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
+&nbsp;[![Model Context Protocol](https://img.shields.io/badge/MCP-server-111?logo=anthropic)](https://modelcontextprotocol.io)
+&nbsp;![Node](https://img.shields.io/badge/node-%E2%89%A518-3c873a.svg)
 
-**1. Google Cloud (once):**
-1. Create or pick a project at <https://console.cloud.google.com/>.
-2. Enable the **Google Search Console API** (and, later, the **PageSpeed Insights API**).
-3. **OAuth consent screen** → **External** → add your Google account as a **test user** (test users skip app verification).
-4. **Credentials** → **Create OAuth client ID** → type **Desktop app**.
-5. Copy the **Client ID** and **Client secret**.
+</div>
 
-**2. Sign in (once):**
+---
+
+## The loop
+
+Most SEO tools stop at the diagnosis. Searchlight runs the whole loop and proves the last step.
+
+| Step | What it does |
+|---|---|
+| **Detect** | Reads your Search Console and Analytics data, crawls key pages, finds indexing, canonical, redirect, sitemap, speed and on-page issues. |
+| **Explain** | Triages every finding in plain language with a worry-level: fix now, worth improving, or normal and safe to ignore. |
+| **Fix** | Edits your repository, framework-aware: canonical and host conflicts, redirect loops, sitemaps, metadata, structured data, the analytics tag. |
+| **Deploy** | Commits and ships through your existing pipeline. Edits only count once they are live. |
+| **Verify** | Re-audits the live site and confirms the fix in a real browser: the redirect resolves, the tag fires, the canonical agrees. |
+
+### Proof
+
+A live run on **zawaaj.in** (a custom Next.js site with a host and canonical conflict and
+missing analytics) went from audit **90 → 98** — canonical set, host redirect aligned
+(`www → apex`), meta trimmed, GA4 installed and verified firing, sitemap submitted — in about
+**50 minutes** (≈25 minutes active; the rest idle waiting on a redeploy), versus a 4–6 hour
+manual baseline for a skilled developer. The full annotated run is on the
+[website](https://searchlight.ajmalaksar.com/#proof).
+
+> Searchlight automates the diagnosis and the fix. It does **not** design your ecommerce
+> event-tracking plan — that part is still a human's job.
+
+---
+
+## Quickstart
+
+**1. Add it to your MCP client** (Claude Code shown; works in any MCP client):
+
 ```bash
-SEARCHLIGHT_OAUTH_CLIENT_ID=xxx SEARCHLIGHT_OAUTH_CLIENT_SECRET=yyy npx -y @ajmalaksar/searchlight login
+claude mcp add searchlight -- npx -y @ajmalaksar/searchlight serve --setup
 ```
-A browser opens; approve access. The token is stored at `~/.searchlight/token.json` (mode 0600). You can also let your agent do this in-conversation with the `auth_login` tool.
 
-**3. Add to your MCP client** (Claude Desktop / generic) — no env vars needed:
+Or, in a generic client config:
+
 ```json
 {
   "mcpServers": {
-    "searchlight": {
-      "command": "npx",
-      "args": ["-y", "@ajmalaksar/searchlight", "serve"]
-    }
+    "searchlight": { "command": "npx", "args": ["-y", "@ajmalaksar/searchlight", "serve"] }
   }
 }
 ```
-Claude Code one-liner: `claude mcp add searchlight -- npx -y @ajmalaksar/searchlight serve`.
 
-**Flags (instead of env vars).** Toggle modes by adding a flag to `args` — no env file to edit:
-- `--setup` → **full setup mode**: GA4 / GTM / verification provisioning **and** Search Console writes (sitemap submit/verify). This is the one flag you want for `/seo-setup` — it is self-sufficient, e.g. `"args": ["-y", "@ajmalaksar/searchlight", "serve", "--setup"]`
-- `--write` → Search Console write tools *only* (sitemap submit/delete), without provisioning. `--setup` already implies this.
-- `--no-analytics` → skip the Analytics scope
+**2. Sign in with Google** (one local OAuth sign-in for Search Console and Analytics; the token
+is stored only on your machine):
 
-Use the same flag when signing in so the right scopes are requested: `searchlight login --setup`.
+```bash
+npx -y @ajmalaksar/searchlight login --setup
+```
 
-> Renamed from `gsc-mcp`: the legacy `~/.gsc-mcp` directory and `GSC_*` environment variables still resolve, so an existing install keeps working without re-authenticating.
+**3. Install the `/searchlight` skill** so your agent runs the whole loop with one command:
+
+```bash
+npx -y @ajmalaksar/searchlight skill install
+```
+
+**4. Ask:**
+
+```text
+/searchlight audit zawaaj.in
+```
+
+> First time on Google Cloud? The bundled client lets most users skip setup. To bring your own
+> (Tier 0), create a **Desktop app** OAuth client (enable the *Google Search Console API* and
+> *PageSpeed Insights API*, add yourself as a test user) and pass
+> `SEARCHLIGHT_OAUTH_CLIENT_ID` / `SEARCHLIGHT_OAUTH_CLIENT_SECRET` to `login`.
+>
+> Renamed from `gsc-mcp`: the legacy `~/.gsc-mcp` directory and `GSC_*` environment variables
+> still resolve, so an existing install keeps working without re-authenticating.
+
+---
+
+## The `/searchlight` skill
+
+`skill install` drops a skill into your AI client so the agent orchestrates the full loop
+instead of you calling raw tools. It routes on the first word:
+
+| Command | Does |
+|---|---|
+| `/searchlight audit [site]` | Read-only diagnosis: detect + explain, triaged. No changes. |
+| `/searchlight setup [site]` | The full guided loop: interview → detect → confirm → provision → fix → deploy → verify. |
+| `/searchlight fix [site]` | Already audited? Go straight to plan → confirm → fix → deploy → verify. |
+
+It always confirms before any provisioning, code edit, sitemap submit, or deploy.
+
+---
+
+## Tools
+
+`auth_status`, `auth_login`, `list_sites`, `use_site`, `get_active_site`, `set_default_site`,
+`account_overview`, `gsc_deep_link`, `query_search_analytics`, `top_queries`, `top_pages`,
+`find_opportunities`, `compare_periods`, `inspect_url`, `coverage_report`, `refresh_coverage`,
+`get_pages_in_bucket`, `diagnose_site`, `snapshot_baseline`, `list_snapshots`, `progress_report`,
+`ga_list_properties`, `ga_measurement_id`, `ga_traffic`, `ga_top_pages`, `ga_report`,
+`list_sitemaps`, `get_sitemap`. With `--write` / `--setup`: `submit_sitemap`, `delete_sitemap`,
+and the GA4 / verification provisioning tools.
+
+**Coverage report** reconstructs the "Page indexing" report the GSC API won't export in bulk:
+it gathers candidate URLs from sitemaps and analytics, inspects them within the 2,000/day
+per-property quota (resumable), caches the results under `~/.searchlight/sites/`, and buckets
+them by index status.
+
+**Baseline & progress** (`snapshot_baseline` → … fix … → `snapshot_baseline` → `progress_report`)
+freeze a site's health on a given day, then diff two days into a plain-English before→after of
+what improved — which issues resolved, which are new, and how score and traffic moved.
+
+---
+
+## Local-first & private
+
+Searchlight runs as a **local** server. You sign in with your own Google account; the token is
+stored only on your device. There is no hosted backend and no data warehouse — each person runs
+their own. Read-only by default; write and provisioning scopes are opt-in, requested only when
+you start a setup action. Open source and MIT licensed. See the [Privacy Policy](https://searchlight.ajmalaksar.com/privacy).
+
+---
 
 ## CLI
 
@@ -51,28 +147,11 @@ searchlight logout           Remove the stored token
 searchlight status           Authentication + onboarding status
 searchlight setup            Guided first-run
 searchlight sites …          Manage the property registry (list / add / remove / default)
+searchlight skill install    Install the /searchlight skill into your AI client (--here for this project)
 searchlight serve            Start the MCP server over stdio (default)
 ```
 
-## Multi-site
-
-`siteUrl` is optional on every tool. It resolves in order: **explicit arg → session active site → persisted default**. Register friendly aliases so you can say "the blog":
-
-```bash
-searchlight sites add blog sc-domain:example.com
-searchlight sites default blog
-```
-In chat: `use_site` switches the active property; `account_overview` gives a portfolio view across all properties.
-
-## Tools
-
-`auth_status`, `auth_login`, `list_sites`, `use_site`, `get_active_site`, `set_default_site`, `account_overview`, `gsc_deep_link`, `query_search_analytics`, `top_queries`, `top_pages`, `find_opportunities`, `compare_periods`, `inspect_url`, `coverage_report`, `refresh_coverage`, `get_pages_in_bucket`, `diagnose_site`, `snapshot_baseline`, `list_snapshots`, `progress_report`, `ga_list_properties`, `ga_measurement_id`, `ga_traffic`, `ga_top_pages`, `ga_report`, `list_sitemaps`, `get_sitemap`. With `SEARCHLIGHT_ENABLE_WRITE=1` (or `--write` / `--setup`): `submit_sitemap`, `delete_sitemap`.
-
-**Coverage report** (`refresh_coverage` → `coverage_report` → `get_pages_in_bucket`) reconstructs the "Page indexing" report the GSC API won't export in bulk: it gathers candidate URLs from your sitemaps and analytics, inspects them within the 2,000/day per-property quota (resumable), caches the results under `~/.searchlight/sites/`, and buckets them by index status.
-
-**Baseline & progress** (`snapshot_baseline` → … fix things … → `snapshot_baseline` → `progress_report`) freeze a site's `diagnose_site` health (score, indexed counts, 28-day traffic, the actionable issue list) on a given day under `~/.searchlight/sites/<hash>/snapshots/<date>.json`, then diff two days into a plain-English report of what improved — which issues were resolved, which are new, and how the score and traffic moved. This makes before→after provable.
-
-## Develop & extend
+## Develop
 
 ```bash
 npm install
@@ -80,7 +159,9 @@ npm run build
 npm test
 ```
 
-The server is a tool registry. To add a capability, create `src/tools/<group>.ts` exporting `register: ToolModule`, then add it to `MODULES` in `src/tools/index.ts`. Each module receives the `McpServer` and a shared `ToolContext` (auth, GSC client, site resolution). See the architecture notes in [SPEC.md](./SPEC.md).
+The server is a tool registry. To add a capability, create `src/tools/<group>.ts` exporting
+`register: ToolModule`, then add it to `MODULES` in `src/tools/index.ts`. See [SPEC.md](./SPEC.md)
+for the architecture.
 
 ## License
 
