@@ -116,7 +116,7 @@ interface Probe {
 
 async function probe(url: string): Promise<Probe> {
   try {
-    const res = await fetch(url, { redirect: "manual", headers: { "User-Agent": "gsc-mcp" } });
+    const res = await fetch(url, { redirect: "manual", headers: { "User-Agent": "searchlight" } });
     if (res.status >= 300 && res.status < 400) {
       return { status: res.status, location: res.headers.get("location") ?? undefined };
     }

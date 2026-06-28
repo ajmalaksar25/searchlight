@@ -1,10 +1,10 @@
 {
-  "name": "@ajmalaksar/gsc-mcp",
+  "name": "@ajmalaksar/searchlight",
   "version": "0.1.0",
-  "description": "Model Context Protocol server for Google Search Console. Query search analytics, inspect URLs, manage sitemaps, and surface SEO opportunities from any MCP client.",
+  "description": "Searchlight: an autonomous technical-SEO and analytics agent (MCP server). Detect indexing, canonical, redirect, sitemap, speed and on-page issues, then fix them in your repo, deploy, and verify. Works with Claude Code, Codex, and any MCP client.",
   "type": "module",
   "bin": {
-    "gsc-mcp": "dist/index.js"
+    "searchlight": "dist/index.js"
   },
   "files": [
     "dist",
@@ -30,21 +30,26 @@
   "keywords": [
     "mcp",
     "model-context-protocol",
-    "google-search-console",
+    "technical-seo",
     "seo",
+    "google-search-console",
+    "ga4",
+    "indexing",
+    "core-web-vitals",
     "search-analytics",
     "claude",
+    "codex",
     "llm"
   ],
   "author": "Ajmal Aksar",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ajmalaksar25/gsc-mcp.git"
+    "url": "git+https://github.com/ajmalaksar25/searchlight.git"
   },
-  "homepage": "https://gsc.ajmalaksar.com",
+  "homepage": "https://searchlight.ajmalaksar.com",
   "bugs": {
-    "url": "https://github.com/ajmalaksar25/gsc-mcp/issues"
+    "url": "https://github.com/ajmalaksar25/searchlight/issues"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",

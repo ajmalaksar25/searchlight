@@ -3,18 +3,36 @@ import path from "node:path";
 import os from "node:os";
 
 /**
+ * Read an env var by suffix, preferring the new SEARCHLIGHT_ prefix and falling
+ * back to the legacy GSC_ prefix, so setups from before the rename keep working.
+ */
+export function env(suffix: string): string | undefined {
+  return process.env[`SEARCHLIGHT_${suffix}`] ?? process.env[`GSC_${suffix}`];
+}
+
+/**
  * Filesystem layout and the property registry.
  *
- * Everything the server persists lives under CONFIG_DIR (default ~/.gsc-mcp,
- * override with GSC_MCP_HOME):
+ * Everything the server persists lives under CONFIG_DIR (default ~/.searchlight,
+ * override with SEARCHLIGHT_HOME; the legacy ~/.gsc-mcp and GSC_MCP_HOME still
+ * resolve, so existing installs are not disturbed):
  *
- *   ~/.gsc-mcp/
+ *   ~/.searchlight/
  *     token.json          OAuth tokens (mode 0600)
  *     config.json         property registry + default site (this file)
- *     sites/<hash>/...     per-site cache, coverage, reports (added in later phases)
+ *     sites/<hash>/...     per-site cache, coverage, reports
  */
-export const CONFIG_DIR =
-  process.env.GSC_MCP_HOME || path.join(os.homedir(), ".gsc-mcp");
+function resolveConfigDir(): string {
+  const explicit = process.env.SEARCHLIGHT_HOME || process.env.GSC_MCP_HOME;
+  if (explicit) return explicit;
+  const next = path.join(os.homedir(), ".searchlight");
+  const legacy = path.join(os.homedir(), ".gsc-mcp");
+  // Reuse an existing legacy dir (token + cache) so the rename is seamless.
+  if (!fs.existsSync(next) && fs.existsSync(legacy)) return legacy;
+  return next;
+}
+
+export const CONFIG_DIR = resolveConfigDir();
 export const TOKEN_PATH = path.join(CONFIG_DIR, "token.json");
 export const CONFIG_PATH = path.join(CONFIG_DIR, "config.json");
 export const SITES_DIR = path.join(CONFIG_DIR, "sites");
@@ -49,7 +67,7 @@ export function saveConfig(cfg: ConfigFile): void {
 
 /** The persisted default site: config.json wins, else the GSC_DEFAULT_SITE env var. */
 export function defaultSite(cfg = loadConfig()): string | undefined {
-  return cfg.defaultSite || process.env.GSC_DEFAULT_SITE || undefined;
+  return cfg.defaultSite || env("DEFAULT_SITE") || undefined;
 }
 
 /** Resolve a user-supplied token that may be an alias or a raw property URL. */

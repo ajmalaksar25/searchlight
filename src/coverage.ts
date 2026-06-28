@@ -63,7 +63,7 @@ function domainMatches(siteUrl: string, url: string): boolean {
 }
 
 async function fetchText(url: string): Promise<string> {
-  const res = await fetch(url, { headers: { "User-Agent": "gsc-mcp coverage crawler" } });
+  const res = await fetch(url, { headers: { "User-Agent": "searchlight coverage crawler" } });
   if (!res.ok) throw new Error(`fetch ${url} -> ${res.status}`);
   return res.text();
 }

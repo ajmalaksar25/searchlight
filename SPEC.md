@@ -1,4 +1,4 @@
-# gsc-mcp: Google Search Console SEO Copilot
+# Searchlight
 
 A build-ready spec for an MCP server (+ a skill + a local dashboard) that lets any LLM client query Google Search Console, **reconstruct the indexing/coverage report the API won't give you in bulk, audit live pages for concrete fixes, score SEO / E‑E‑A‑T / GEO, and present it all in a document a human or Claude can act on.** Hand this file to Claude Code as the source of truth.
 
@@ -60,7 +60,7 @@ The GSC API exposes **exactly four services**: Search Analytics, Sitemaps, Sites
 | Capability the user wants | API reality | Our approach |
 | --- | --- | --- |
 | Search performance (clicks/impressions/CTR/position) | ✅ Search Analytics | direct |
-| Sitemaps read + submit/delete | ✅ Sitemaps | read direct; write behind `GSC_ENABLE_WRITE` |
+| Sitemaps read + submit/delete | ✅ Sitemaps | read direct; write behind `SEARCHLIGHT_ENABLE_WRITE` |
 | Per-URL index status & "why not indexed" | ✅ URL Inspection — **but 2,000/day, 600/min per property** | cache + quota-aware crawler (§7) |
 | **Bulk "Page indexing" report** (all URLs + reasons) | ❌ **No bulk export exists** | reconstruct URL-by-URL from sitemaps + analytics, cached, bucketed (§7) |
 | **Removals** (incl. autogenerate) | ❌ **UI-only, no API** | detect candidates → deep-link to the property's Removals UI |
@@ -88,7 +88,7 @@ The GSC API exposes **exactly four services**: Search Analytics, Sitemaps, Sites
                          │  report.ts ─ generates report.{json,md,html} │
                          └───────────────┬──────────────────────────────┘
                                          │ reads/writes
-                          ~/.gsc-mcp/sites/<hash>/report.json  ◄── single source of truth
+                          ~/.searchlight/sites/<hash>/report.json  ◄── single source of truth
                                          │
             ┌────────────────────────────┼───────────────────────────────┐
             ▼                            ▼                                ▼
@@ -143,7 +143,7 @@ Tier 0 one-time setup (document with screenshots / a short recording):
 ### 5.2 Runtime login: loopback flow
 
 Login is an interactive CLI subcommand, not part of the MCP server:
-1. `gsc-mcp login` starts a throwaway HTTP server on `127.0.0.1:<random-port>`.
+1. `searchlight login` starts a throwaway HTTP server on `127.0.0.1:<random-port>`.
 2. Build an auth URL with `access_type=offline`, `prompt=consent`, redirect to `http://127.0.0.1:<port>/callback`, and the active scope.
 3. Open the browser (print the URL as fallback).
 4. Capture `code` on the callback, exchange for tokens, write to disk, show a success page, close the server.
@@ -151,30 +151,30 @@ Login is an interactive CLI subcommand, not part of the MCP server:
 
 ### 5.3 Token persistence and refresh
 
-- Store tokens at `~/.gsc-mcp/token.json` (override with `GSC_MCP_HOME`), mode `0600`.
+- Store tokens at `~/.searchlight/token.json` (override with `SEARCHLIGHT_MCP_HOME`), mode `0600`.
 - On server start: load token, set credentials, subscribe to the client's `tokens` event to persist refreshed access tokens.
 - **Merge on save**: refresh responses omit `refresh_token`; always merge new over stored to avoid losing it.
 
 ### 5.4 Scopes
 
 - Default: `https://www.googleapis.com/auth/webmasters.readonly`.
-- If `GSC_ENABLE_WRITE` is truthy: `https://www.googleapis.com/auth/webmasters` (read + write), and write tools register.
-- Changing scope requires a fresh `gsc-mcp login` (the stored token carries the old scope).
+- If `SEARCHLIGHT_ENABLE_WRITE` is truthy: `https://www.googleapis.com/auth/webmasters` (read + write), and write tools register.
+- Changing scope requires a fresh `searchlight login` (the stored token carries the old scope).
 - PSI/CrUX use an **API key**, not OAuth — no scope impact.
 
 ### 5.5 Config inputs (precedence) and the property registry
 
 GSC OAuth (in order):
-1. `GSC_OAUTH_CLIENT_ID` + `GSC_OAUTH_CLIENT_SECRET`
-2. `GSC_OAUTH_CREDENTIALS` = path to `client_secret.json` (accept both `installed` and `web` blocks)
+1. `SEARCHLIGHT_OAUTH_CLIENT_ID` + `SEARCHLIGHT_OAUTH_CLIENT_SECRET`
+2. `SEARCHLIGHT_OAUTH_CREDENTIALS` = path to `client_secret.json` (accept both `installed` and `web` blocks)
 3. Otherwise: a clear error naming the exact env vars.
 
 Other config:
-- `GSC_PAGESPEED_API_KEY` — enables §10 tools; if absent, those tools return a clean "set this key" message.
-- `GSC_DEFAULT_SITE` — optional default/active property (see §11).
-- `GSC_MCP_HOME` — override `~/.gsc-mcp`.
+- `SEARCHLIGHT_PAGESPEED_API_KEY` — enables §10 tools; if absent, those tools return a clean "set this key" message.
+- `SEARCHLIGHT_DEFAULT_SITE` — optional default/active property (see §11).
+- `SEARCHLIGHT_MCP_HOME` — override `~/.searchlight`.
 
-**Property registry** — `~/.gsc-mcp/config.json`:
+**Property registry** — `~/.searchlight/config.json`:
 ```json
 {
   "defaultSite": "sc-domain:example.com",
@@ -184,18 +184,18 @@ Other config:
   ]
 }
 ```
-Aliases let users (and the skill) say "audit the blog" instead of pasting a property URL. Managed via CLI (`gsc-mcp sites …`) and tools (§13).
+Aliases let users (and the skill) say "audit the blog" instead of pasting a property URL. Managed via CLI (`searchlight sites …`) and tools (§13).
 
 ### 5.6 Onboarding tiers (make first-run effortless)
 
 The biggest friction in the whole product is Google auth. We attack it on three fronts so the common path is **install → click sign-in → done**, with bring-your-own as a power-user fallback. (A *hosted OAuth client* is just a shared app registration — tokens and the server still run entirely on the user's machine, so §1's local/single-tenant promise holds.)
 
 - **Tier 1 — zero-config (target / default once verified).** Ship the maintainer-owned, Google-**verified** Desktop client embedded in the package. The user sets **no env vars at all** and just signs in. Desktop-type client secrets are not treated as confidential by Google's installed-app flow, so embedding is acceptable; use PKCE.
-- **Tier 0 — bring-your-own (works day one; pre-verification; isolation).** The §5.1 flow. `gsc-mcp setup` opens each Google Cloud page in order and says exactly what to paste.
-- **In-conversation login (no terminal).** The **`auth_login`** tool starts the loopback flow from inside the chat — the user says "log me into Search Console," the browser opens, the token is captured, done. The CLI `gsc-mcp login` stays for terminal users. Unauthenticated tool calls return a one-tap next step (with the URL), never a stack trace.
+- **Tier 0 — bring-your-own (works day one; pre-verification; isolation).** The §5.1 flow. `searchlight setup` opens each Google Cloud page in order and says exactly what to paste.
+- **In-conversation login (no terminal).** The **`auth_login`** tool starts the loopback flow from inside the chat — the user says "log me into Search Console," the browser opens, the token is captured, done. The CLI `searchlight login` stays for terminal users. Unauthenticated tool calls return a one-tap next step (with the URL), never a stack trace.
 - **Self-driving first run.** `auth_status` returns a `setupState` (`needs_oauth_client | needs_login | needs_pagespeed_key | ready`) and a human `nextStep`; the `gsc-seo` skill (§14) reads it and walks a non-technical user through whatever's missing — so "tell Claude to set it up for me" works.
 
-**Precedence** (extends §5.5): explicit `GSC_OAUTH_*` / `GSC_OAUTH_CREDENTIALS` → bundled Tier-1 client → guided setup. The PageSpeed key stays optional and degrades gracefully; it never blocks onboarding.
+**Precedence** (extends §5.5): explicit `SEARCHLIGHT_OAUTH_*` / `SEARCHLIGHT_OAUTH_CREDENTIALS` → bundled Tier-1 client → guided setup. The PageSpeed key stays optional and degrades gracefully; it never blocks onboarding.
 
 ---
 
@@ -253,7 +253,7 @@ Generated alongside `.json/.md`. Open it in a browser, screenshot it, share it. 
 
 ### 7.1 Cache layout
 ```
-~/.gsc-mcp/
+~/.searchlight/
   token.json
   config.json
   sites/
@@ -296,7 +296,7 @@ Three heuristic scores plus a unified "fix these first" list. **Honesty note for
 | **E‑E‑A‑T (EEO)** | author bylines / `author` schema; outbound citations to trusted sources; last-updated / freshness dates; about/contact presence; original vs thin content signals |
 | **GEO** | front-loaded direct answers; FAQ/HowTo/QAPage schema; factual density & extractability; clear headings as answerable questions; quotable structure. **Delegates to the `ai-seo` skill** for the deep analysis |
 
-Each score returns `{ value, grade, topGaps[], whatToFix[] }` where `whatToFix` items are concrete and grounded in Google's SEO Starter Guide checklist (titles, meta descriptions, descriptive URLs, canonicalization, alt text, internal links, "avoid intrusive interstitials/distractions"). Also surfaces **what's missing entirely** ("no structured data found", "no sitemap submitted", "no page-speed data — set `GSC_PAGESPEED_API_KEY`").
+Each score returns `{ value, grade, topGaps[], whatToFix[] }` where `whatToFix` items are concrete and grounded in Google's SEO Starter Guide checklist (titles, meta descriptions, descriptive URLs, canonicalization, alt text, internal links, "avoid intrusive interstitials/distractions"). Also surfaces **what's missing entirely** ("no structured data found", "no sitemap submitted", "no page-speed data — set `SEARCHLIGHT_PAGESPEED_API_KEY`").
 
 ---
 
@@ -329,7 +329,7 @@ Results cache to `audits/<hash>.json` and feed `report.json.pageIssues`.
 
 ## 10. Page speed (PageSpeed Insights + CrUX)
 
-Addresses "I haven't been watching page speed." Uses the **PageSpeed Insights API** (Lighthouse lab scores) and **CrUX API** (real-user field Core Web Vitals). Needs `GSC_PAGESPEED_API_KEY`; degrades cleanly without it.
+Addresses "I haven't been watching page speed." Uses the **PageSpeed Insights API** (Lighthouse lab scores) and **CrUX API** (real-user field Core Web Vitals). Needs `SEARCHLIGHT_PAGESPEED_API_KEY`; degrades cleanly without it.
 
 - **`page_speed`** — `{ url, strategy?=mobile|desktop }`. Returns Lighthouse performance score + lab metrics, plus CrUX field **LCP / INP / CLS** with pass/needs-work/poor verdicts. Feeds `report.json.speed` and the SEO score.
 
@@ -354,7 +354,7 @@ Switching the working property must happen **through the MCP itself** — the us
 
 ## 12. CLI surface
 
-`gsc-mcp` dispatches on `argv[2]`:
+`searchlight` dispatches on `argv[2]`:
 
 | Command | Behavior |
 | --- | --- |
@@ -418,7 +418,7 @@ All tools return `content: [{ type: "text", text }]`. On error, same shape with 
 - **`list_sitemaps`** — `{ siteUrl }`. Array with status + error/warning counts.
 - **`get_sitemap`** — `{ siteUrl, feedpath }`.
 
-### Sitemaps (write — only when `GSC_ENABLE_WRITE`)
+### Sitemaps (write — only when `SEARCHLIGHT_ENABLE_WRITE`)
 - **`submit_sitemap`** — `{ siteUrl, feedpath }`.
 - **`delete_sitemap`** — `{ siteUrl, feedpath }`.
 
@@ -446,7 +446,7 @@ Three rendering paths, layered (do not use Next.js — §4):
 | --- | --- | --- |
 | **Static `report.html`** | single self-contained file from the report generator (§6.3) | first (nearly free) |
 | **MCP Apps widgets** | in-client interactive components (site picker, coverage chart, opportunity list) rendered inside Claude via MCP UI resources | mid |
-| **Vite SPA dashboard** | `gsc-mcp dashboard` → local `127.0.0.1` app reading `report.json`; **list sites, switch, drill into buckets/audits, trigger `refresh_coverage`** | the "real" dashboard |
+| **Vite SPA dashboard** | `searchlight dashboard` → local `127.0.0.1` app reading `report.json`; **list sites, switch, drill into buckets/audits, trigger `refresh_coverage`** | the "real" dashboard |
 
 The Vite app is **prebuilt** into `dist/dashboard/` and served by a tiny static server — no build toolchain at runtime. It reads the same per-site `report.json` the tools write, so it never disagrees with what Claude sees.
 
@@ -455,11 +455,11 @@ The Vite app is **prebuilt** into `dist/dashboard/` and served by a tiny static 
 ## 16. Project layout
 
 ```
-gsc-mcp/
-  package.json          # bin: { "gsc-mcp": "dist/index.js" }, type: module, files incl. dist/dashboard
+searchlight/
+  package.json          # bin: { "searchlight": "dist/index.js" }, type: module, files incl. dist/dashboard
   tsconfig.json         # ES2022, Node16
-  .env.example          # every env var (OAuth, GSC_PAGESPEED_API_KEY, GSC_DEFAULT_SITE, …)
-  .gitignore            # node_modules, dist, token.json, client_secret*.json, .env, ~/.gsc-mcp
+  .env.example          # every env var (OAuth, SEARCHLIGHT_PAGESPEED_API_KEY, SEARCHLIGHT_DEFAULT_SITE, …)
+  .gitignore            # node_modules, dist, token.json, client_secret*.json, .env, ~/.searchlight
   README.md  LICENSE    # MIT
   src/
     index.ts            # shebang + CLI dispatch (§12)
@@ -479,7 +479,7 @@ gsc-mcp/
   dashboard/            # Vite + React source (built to dist/dashboard) (§15)
 ```
 
-`package.json`: `"type": "module"`, `"bin"`, `"files": ["dist","skill","README.md",".env.example"]`, scripts `build` (`tsc && vite build --outDir dist/dashboard && chmod +x dist/index.js`), `bundle` (`mcpb pack` → `gsc-mcp.mcpb` for one-click Desktop install, §17.1), `login`, `start`, `dashboard`, `prepublishOnly`. Keep the `#!/usr/bin/env node` shebang first in `src/index.ts`.
+`package.json`: `"type": "module"`, `"bin"`, `"files": ["dist","skill","README.md",".env.example"]`, scripts `build` (`tsc && vite build --outDir dist/dashboard && chmod +x dist/index.js`), `bundle` (`mcpb pack` → `searchlight.mcpb` for one-click Desktop install, §17.1), `login`, `start`, `dashboard`, `prepublishOnly`. Keep the `#!/usr/bin/env node` shebang first in `src/index.ts`.
 
 ---
 
@@ -491,12 +491,12 @@ Target usage is `npx`. Claude Desktop / generic MCP client:
   "mcpServers": {
     "gsc": {
       "command": "npx",
-      "args": ["-y", "@ajmalaksar/gsc-mcp", "serve"],
+      "args": ["-y", "@ajmalaksar/searchlight", "serve"],
       "env": {
-        "GSC_OAUTH_CLIENT_ID": "...",
-        "GSC_OAUTH_CLIENT_SECRET": "...",
-        "GSC_PAGESPEED_API_KEY": "...",
-        "GSC_DEFAULT_SITE": "sc-domain:example.com"
+        "SEARCHLIGHT_OAUTH_CLIENT_ID": "...",
+        "SEARCHLIGHT_OAUTH_CLIENT_SECRET": "...",
+        "SEARCHLIGHT_PAGESPEED_API_KEY": "...",
+        "SEARCHLIGHT_DEFAULT_SITE": "sc-domain:example.com"
       }
     }
   }
@@ -504,16 +504,16 @@ Target usage is `npx`. Claude Desktop / generic MCP client:
 ```
 That block is the **Tier 0 (bring-your-own)** example. Then either log in once from a terminal, or just tell Claude *"log me into Search Console"* (the `auth_login` tool, §5.6):
 ```
-npx -y @ajmalaksar/gsc-mcp login
+npx -y @ajmalaksar/searchlight login
 ```
-Confirm the final npm name/scope before publishing (`@ajmalaksar/gsc-mcp` is a placeholder).
+Confirm the final npm name/scope before publishing (`@ajmalaksar/searchlight` is a placeholder).
 
 ### 17.1 Low-friction install paths (the intended default experience)
 
 - **Zero-config (Tier 1, once the hosted client is verified):** the same config block with an **empty `env`** — no OAuth vars, no PageSpeed key required. Install, then say "log me in."
-- **One-click for Claude Desktop (`.mcpb`):** ship an **MCP Bundle** so non-technical users **double-click to install** — no JSON, no terminal. `npm run build` also packs `gsc-mcp.mcpb`.
-- **One-line for Claude Code:** `claude mcp add gsc -- npx -y @ajmalaksar/gsc-mcp serve`, then tell Claude to log in.
-- **"Tell Claude to install it":** the user pastes — *"Install the gsc-mcp MCP server and sign me into Google Search Console."* Claude Code runs `claude mcp add`, calls `auth_login`, then `list_sites`. The onboarding skill (§14) handles anything missing.
+- **One-click for Claude Desktop (`.mcpb`):** ship an **MCP Bundle** so non-technical users **double-click to install** — no JSON, no terminal. `npm run build` also packs `searchlight.mcpb`.
+- **One-line for Claude Code:** `claude mcp add gsc -- npx -y @ajmalaksar/searchlight serve`, then tell Claude to log in.
+- **"Tell Claude to install it":** the user pastes — *"Install the searchlight MCP server and sign me into Google Search Console."* Claude Code runs `claude mcp add`, calls `auth_login`, then `list_sites`. The onboarding skill (§14) handles anything missing.
 
 ---
 
@@ -526,10 +526,10 @@ Confirm the final npm name/scope before publishing (`@ajmalaksar/gsc-mcp` is a p
 5. **Coverage/quota**: `refresh_coverage` respects 2k/day, persists `quota.json`, resumes next run, buckets correctly.
 6. **Audit correctness**: `audit_page` on a page with a missing meta/OG image reports it with a suggested edit; previews render.
 7. **Multi-site**: alias resolution, `set_default_site`, `account_overview` aggregates.
-8. **Read-only safety**: `submit_sitemap`/`delete_sitemap` absent unless `GSC_ENABLE_WRITE`; no tool ever mutates the live site otherwise.
-9. **Error surface**: unauthenticated → "run `gsc-mcp login`"; bad `siteUrl` → API error text; missing PSI key → "set `GSC_PAGESPEED_API_KEY`".
+8. **Read-only safety**: `submit_sitemap`/`delete_sitemap` absent unless `SEARCHLIGHT_ENABLE_WRITE`; no tool ever mutates the live site otherwise.
+9. **Error surface**: unauthenticated → "run `searchlight login`"; bad `siteUrl` → API error text; missing PSI key → "set `SEARCHLIGHT_PAGESPEED_API_KEY`".
 10. **stdout cleanliness**: only JSON-RPC on stdout in `serve` mode.
-11. **Dashboard**: `gsc-mcp dashboard` serves and renders the report; switching sites re-renders.
+11. **Dashboard**: `searchlight dashboard` serves and renders the report; switching sites re-renders.
 12. **Onboarding**: a fresh machine with no env vars reaches first data via `auth_login` (in-conversation, no terminal); `.mcpb` double-click installs in Claude Desktop; `auth_status.setupState` correctly reports each missing piece.
 
 ---
@@ -559,7 +559,7 @@ Each phase is a standalone, demoable artifact.
 - **Token discipline**: insight/coverage tools may analyze up to 25k rows locally but must return digests; pagination via `startRow`/`get_pages_in_bucket`.
 - **MCP going stateless**: the protocol is drifting away from server-held sessions. Keep the active site as our *own* in-process variable with a persisted `config.json` fallback, so `use_site` keeps working regardless of protocol-level session semantics. If a future HTTP/multi-session transport is added, key the active site by session id rather than a module global.
 - **Dashboard weight**: keep Vite/React as devDeps; ship prebuilt; never pull a build toolchain at `npx` runtime.
-- **Scope change**: switching `GSC_ENABLE_WRITE` requires re-login.
+- **Scope change**: switching `SEARCHLIGHT_ENABLE_WRITE` requires re-login.
 - **Unverified-app screen (pre-verification)**: until the Tier-1 hosted client is Google-verified, sign-in shows an "unverified app" warning and is capped at ~100 users. Document the "Advanced → continue" step; keep Tier-0 bring-your-own as the default until verification lands, then flip it.
 
 ---
@@ -580,7 +580,7 @@ This ships under a personal brand, so each phase is designed to be a post:
 The goal widened: **one login connects everything** (Search Console + Analytics + speed), the assessment matches what **professional SEO agencies** deliver, and — because the user runs this in an agent (Claude Code) with their site's repo open — the system can **diagnose *and* fix**. This section captures that; it supersedes any narrower framing above where they conflict.
 
 ### 22.1 What pro audits cover — and our coverage
-A 2026 agency-grade audit spans six layers. Where gsc-mcp stands:
+A 2026 agency-grade audit spans six layers. Where searchlight stands:
 
 | Layer | What pros assess | Status |
 | --- | --- | --- |
@@ -649,7 +649,7 @@ Setting a site up *from scratch* needs more than read access. We tier it so the 
 ### 23.3 The recommended balance — don't over-scope
 Most setup is **code (Tier 3) + read scopes (Tier 1) + a couple of guided one-click Google actions** — not full edit-scope automation. So:
 - **Public verified app = Tier 1 (read-only).** Easy verification, safe consent.
-- **Setup is performed mostly via repo edits + guidance**, with **Tier 2 provisioning as an explicit opt-in** (`GSC_ENABLE_SETUP`, separate consent / bring-your-own client). E.g. GA4: either create via `analytics.edit` (opt-in) *or* guide the user to create it and paste the measurement ID (no edit scope needed).
+- **Setup is performed mostly via repo edits + guidance**, with **Tier 2 provisioning as an explicit opt-in** (`SEARCHLIGHT_ENABLE_SETUP`, separate consent / bring-your-own client). E.g. GA4: either create via `analytics.edit` (opt-in) *or* guide the user to create it and paste the measurement ID (no edit scope needed).
 - Rationale: every added scope makes verification harder and the consent scarier. Keep the default minimal; gate power behind opt-in.
 
 ### 23.4 The `/seo-setup` skill
@@ -669,7 +669,7 @@ A skill that runs the flow end-to-end: **detect gaps** (`diagnose_site` + `audit
 
 The north star is a tracked **baseline → improvement** loop. `diagnose_site` answers "how healthy is this site *right now*"; snapshots make that longitudinal so we can prove a fix worked rather than just assert it.
 
-- **`snapshot_baseline`** — freezes today's `diagnose_site` output (health score + grade, indexed/not-indexed/inspected counts, 28-day clicks/impressions/top-queries, and the actionable critical+warning finding list) to `~/.gsc-mcp/sites/<hash>/snapshots/<YYYY-MM-DD>.json`. Re-running on the same UTC day overwrites that day (a fresh read of "today"). Capture one **before** changing anything.
+- **`snapshot_baseline`** — freezes today's `diagnose_site` output (health score + grade, indexed/not-indexed/inspected counts, 28-day clicks/impressions/top-queries, and the actionable critical+warning finding list) to `~/.searchlight/sites/<hash>/snapshots/<YYYY-MM-DD>.json`. Re-running on the same UTC day overwrites that day (a fresh read of "today"). Capture one **before** changing anything.
 - **`list_snapshots`** — the dates available for a property (oldest→newest), so the user can pick two to compare.
 - **`progress_report`** — diffs two snapshots (defaults oldest→newest; accepts explicit `from`/`to`). Reports score/grade movement, indexed/traffic deltas, and findings matched by their stable `id` into **resolved** (gone), **new** (appeared), and **persisting** (still present) — plus an honest plain-English headline (including "no measurable change" when nothing moved).
 

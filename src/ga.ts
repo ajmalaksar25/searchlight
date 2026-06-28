@@ -31,7 +31,7 @@ export function gaErrorMessage(e: unknown): string {
   if (/PERMISSION_DENIED|insufficient|forbidden|403|invalid_scope|ACCESS_TOKEN_SCOPE_INSUFFICIENT/i.test(msg)) {
     return (
       "Analytics access isn't granted yet. Enable the 'analytics.readonly' scope on your Google OAuth " +
-      "consent screen, then run `gsc-mcp login` again (or the auth_login tool)."
+      "consent screen, then run `searchlight login` again (or the auth_login tool)."
     );
   }
   return msg;

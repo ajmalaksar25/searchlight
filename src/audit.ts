@@ -68,7 +68,7 @@ export async function auditPage(rawUrl: string): Promise<AuditResult> {
   let status = 0;
   let finalUrl = rawUrl;
   try {
-    res = await fetch(rawUrl, { headers: { "User-Agent": "gsc-mcp on-page auditor" } });
+    res = await fetch(rawUrl, { headers: { "User-Agent": "searchlight on-page auditor" } });
     status = res.status;
     finalUrl = res.url || rawUrl;
     html = await res.text();

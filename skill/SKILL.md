@@ -1,15 +1,15 @@
 ---
 name: seo-setup
-description: End-to-end SEO setup and improvement for a website using the gsc MCP server. Detects what's missing (indexing, sitemap, analytics, page speed, on-page issues), explains why in plain language with worry-levels, and — with the user's confirmation — provisions GA4/site-verification and fixes the site's code, then re-verifies. Use when the user wants to set up SEO/analytics for a site, fix indexing problems, or audit and improve a site's search quality.
+description: End-to-end SEO setup and improvement for a website using the searchlight MCP server. Detects what's missing (indexing, sitemap, analytics, page speed, on-page issues), explains why in plain language with worry-levels, and — with the user's confirmation — provisions GA4/site-verification and fixes the site's code, then re-verifies. Use when the user wants to set up SEO/analytics for a site, fix indexing problems, or audit and improve a site's search quality.
 ---
 
 # seo-setup
 
-Run a website from "I don't know what's wrong" to "set up properly and improving", using the `gsc` MCP server for data + provisioning and the agent's repo access for fixes. Meet the user where they are (beginner → pro). **Never act without confirming first.**
+Run a website from "I don't know what's wrong" to "set up properly and improving", using the `searchlight` MCP server for data + provisioning and the agent's repo access for fixes. Meet the user where they are (beginner → pro). **Never act without confirming first.**
 
 ## 0. Prerequisites (check, don't assume)
-1. The `gsc` MCP server must be connected. Call `auth_status` / `setup_status`.
-   - Not authenticated → tell them to run `gsc-mcp login --setup`, or use the `auth_login` tool.
+1. The `searchlight` MCP server must be connected. Call `auth_status` / `setup_status`.
+   - Not authenticated → tell them to run `searchlight login --setup`, or use the `auth_login` tool.
    - **For the full hands-off run, the server must be in setup mode** (`setupMode: true`, started with `--setup`) and the token must include the setup scopes (re-login with `--setup`). `--setup` is self-sufficient: it turns on provisioning (GA4/GTM/verification) **and** Search Console writes (sitemap submit) and reports `writeEnabled: true`. If `setupMode` is false or scopes are missing, say so up front and give the exact one-time command before proposing any write/provision step — don't discover it mid-run.
 2. If the user's **site code is open in this workspace**, you can apply fixes. If not (hosted CMS), you give exact instructions instead of editing.
 

@@ -7,7 +7,7 @@ import { diagnoseSite, type Diagnosis, type Severity } from "./diagnose.js";
  * Baseline snapshots: freeze a site's health on a given day so before/after is
  * provable. Each snapshot is the headline numbers + a compact finding list
  * derived from diagnoseSite(), stored under
- *   ~/.gsc-mcp/sites/<hash>/snapshots/<YYYY-MM-DD>.json
+ *   ~/.searchlight/sites/<hash>/snapshots/<YYYY-MM-DD>.json
  * progress_report diffs two of them into a plain-English what-changed report.
  * See SPEC §8 (diagnose) — this is its longitudinal companion.
  */

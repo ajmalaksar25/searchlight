@@ -1,7 +1,8 @@
 import fs from "node:fs";
+import { env } from "./config.js";
 
 /**
- * PageSpeed Insights / CrUX API keys. Unlike the GSC OAuth client these are
+ * PageSpeed Insights / CrUX API keys. Unlike the Searchlight OAuth client these are
  * project-level API keys (not user consent), so they are resolved the same way
  * as the bundled OAuth client: an explicit env var wins, otherwise the bundled
  * file shipped with the package (gitignored in source). See SPEC §10.
@@ -21,10 +22,10 @@ function readBundledKeys(): BundledKeys {
 
 /** PageSpeed Insights API key: env var wins, then the bundled file. */
 export function pagespeedApiKey(): string | undefined {
-  return process.env.GSC_PAGESPEED_API_KEY || readBundledKeys().pagespeedApiKey || undefined;
+  return env("PAGESPEED_API_KEY") || readBundledKeys().pagespeedApiKey || undefined;
 }
 
 /** CrUX API key: env var, then the bundled file, then falls back to the PSI key. */
 export function cruxApiKey(): string | undefined {
-  return process.env.GSC_CRUX_API_KEY || readBundledKeys().cruxApiKey || pagespeedApiKey();
+  return env("CRUX_API_KEY") || readBundledKeys().cruxApiKey || pagespeedApiKey();
 }

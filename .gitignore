@@ -11,3 +11,5 @@ config.json
 .gsc-mcp/
 .lean-ctx/
 .DS_Store
+.agents/
+skills-lock.json

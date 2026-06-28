@@ -12,22 +12,22 @@ import {
 import { gscClient } from "./gsc.js";
 import { refreshCoverage } from "./coverage.js";
 
-const USAGE = `gsc-mcp - Google Search Console SEO copilot (MCP server)
+const USAGE = `searchlight - autonomous technical SEO + analytics (MCP server)
 
 Usage:
-  gsc-mcp login            Sign in with Google (opens a browser)
-  gsc-mcp logout           Remove the stored token
-  gsc-mcp status           Show authentication + onboarding status
-  gsc-mcp setup            Guided first-run: what to set up next
-  gsc-mcp sites            Manage the property registry:
+  searchlight login            Sign in with Google (opens a browser)
+  searchlight logout           Remove the stored token
+  searchlight status           Show authentication + onboarding status
+  searchlight setup            Guided first-run: what to set up next
+  searchlight sites            Manage the property registry:
                              sites list
                              sites add <alias> <siteUrl>
                              sites remove <alias>
                              sites default <alias|siteUrl>
-  gsc-mcp crawl            Crawl coverage headlessly (schedulable):
+  searchlight crawl            Crawl coverage headlessly (schedulable):
                              crawl <alias|siteUrl> [--max N]
                              crawl --all [--max N]
-  gsc-mcp serve            Start the MCP server over stdio (default)
+  searchlight serve            Start the MCP server over stdio (default)
 
 Flags (no env vars needed — pass these in your MCP client's args, e.g.
 ["serve", "--setup"], and use the same flag when running \`login\`):
@@ -35,7 +35,7 @@ Flags (no env vars needed — pass these in your MCP client's args, e.g.
   --write          Enable Search Console write tools (sitemap submit/delete)
   --no-analytics   Don't request the Google Analytics scope
 
-Add it to an MCP client by running \`gsc-mcp serve\` (or just \`gsc-mcp\`).`;
+Add it to an MCP client by running \`searchlight serve\` (or just \`searchlight\`).`;
 
 function scopeSummary(): string {
   const granted = grantedScopes();
@@ -67,8 +67,8 @@ function printSetup(): void {
         "  2. Enable the Google Search Console API (and PageSpeed Insights API).",
         "  3. OAuth consent screen: External, add yourself as a test user.",
         "  4. Create an OAuth client ID of type 'Desktop app'.",
-        "  5. Set GSC_OAUTH_CLIENT_ID and GSC_OAUTH_CLIENT_SECRET (or GSC_OAUTH_CREDENTIALS).",
-        "Then run `gsc-mcp login`.",
+        "  5. Set SEARCHLIGHT_OAUTH_CLIENT_ID and SEARCHLIGHT_OAUTH_CLIENT_SECRET (or SEARCHLIGHT_OAUTH_CREDENTIALS).",
+        "Then run `searchlight login`.",
       ].join("\n")
     );
   }
@@ -82,7 +82,7 @@ function manageSites(args: string[]): void {
     case "list": {
       console.error(`Default: ${defaultSite(cfg) ?? "(none)"}`);
       if (!cfg.sites.length) {
-        console.error("No aliases registered. Add one: gsc-mcp sites add <alias> <siteUrl>");
+        console.error("No aliases registered. Add one: searchlight sites add <alias> <siteUrl>");
         return;
       }
       for (const s of cfg.sites) console.error(`  ${s.alias} -> ${s.siteUrl}`);
@@ -90,21 +90,21 @@ function manageSites(args: string[]): void {
     }
     case "add": {
       const [alias, siteUrl] = [args[1], args[2]];
-      if (!alias || !siteUrl) throw new Error("Usage: gsc-mcp sites add <alias> <siteUrl>");
+      if (!alias || !siteUrl) throw new Error("Usage: searchlight sites add <alias> <siteUrl>");
       addAlias(alias, siteUrl);
       console.error(`Added alias ${alias} -> ${siteUrl}`);
       return;
     }
     case "remove": {
       const alias = args[1];
-      if (!alias) throw new Error("Usage: gsc-mcp sites remove <alias>");
+      if (!alias) throw new Error("Usage: searchlight sites remove <alias>");
       removeAlias(alias);
       console.error(`Removed alias ${alias}`);
       return;
     }
     case "default": {
       const site = args[1];
-      if (!site) throw new Error("Usage: gsc-mcp sites default <alias|siteUrl>");
+      if (!site) throw new Error("Usage: searchlight sites default <alias|siteUrl>");
       const next = setDefaultSite(site);
       console.error(`Default site set to ${next.defaultSite}`);
       return;
@@ -136,7 +136,7 @@ async function crawl(args: string[]): Promise<void> {
   } else {
     const target = positional[0];
     if (!target) {
-      throw new Error("Usage: gsc-mcp crawl <alias|siteUrl> [--max N]  |  gsc-mcp crawl --all [--max N]");
+      throw new Error("Usage: searchlight crawl <alias|siteUrl> [--max N]  |  searchlight crawl --all [--max N]");
     }
     sites = [resolveAlias(target)];
   }
@@ -166,14 +166,14 @@ function applyGlobalFlags(argv: string[]): string[] {
     switch (a) {
       case "--setup":
       case "--enable-setup":
-        process.env.GSC_ENABLE_SETUP = "1";
+        process.env.SEARCHLIGHT_ENABLE_SETUP = "1";
         break;
       case "--write":
       case "--enable-write":
-        process.env.GSC_ENABLE_WRITE = "1";
+        process.env.SEARCHLIGHT_ENABLE_WRITE = "1";
         break;
       case "--no-analytics":
-        process.env.GSC_DISABLE_ANALYTICS = "1";
+        process.env.SEARCHLIGHT_DISABLE_ANALYTICS = "1";
         break;
       default:
         rest.push(a);

@@ -5,7 +5,7 @@ import { siteDir } from "./config.js";
 /**
  * Generic per-site cache IO + a daily quota ledger.
  *
- * Each property gets a folder under ~/.gsc-mcp/sites/<hash>/ holding small JSON
+ * Each property gets a folder under ~/.searchlight/sites/<hash>/ holding small JSON
  * files (candidates.json, coverage.json, quota.json, meta.json). The coverage
  * crawler (coverage.ts) is the main client.
  */

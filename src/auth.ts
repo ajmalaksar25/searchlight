@@ -3,7 +3,7 @@ import { URL } from "node:url";
 import fs from "node:fs";
 import { google } from "googleapis";
 import open from "open";
-import { CONFIG_DIR, TOKEN_PATH } from "./config.js";
+import { CONFIG_DIR, TOKEN_PATH, env } from "./config.js";
 import { pagespeedApiKey } from "./keys.js";
 
 /**
@@ -21,7 +21,7 @@ const ANALYTICS_SCOPE = "https://www.googleapis.com/auth/analytics.readonly";
 
 /** Setup/provisioning mode — registers the tools that create GA4/GTM/verification. */
 export function setupEnabled(): boolean {
-  return /^(1|true|yes|on)$/i.test(process.env.GSC_ENABLE_SETUP || "");
+  return /^(1|true|yes|on)$/i.test(env("ENABLE_SETUP") || "");
 }
 
 /**
@@ -31,15 +31,15 @@ export function setupEnabled(): boolean {
  * a user shouldn't have to also know to pass `--write`. See SPEC §23.
  */
 export function writeEnabled(): boolean {
-  return setupEnabled() || /^(1|true|yes|on)$/i.test(process.env.GSC_ENABLE_WRITE || "");
+  return setupEnabled() || /^(1|true|yes|on)$/i.test(env("ENABLE_WRITE") || "");
 }
 
-/** Analytics is included by default (one login = GSC + GA). Opt out with GSC_DISABLE_ANALYTICS. */
+/** Analytics is included by default (one login = GSC + GA). Opt out with SEARCHLIGHT_DISABLE_ANALYTICS. */
 function analyticsEnabled(): boolean {
-  return !/^(1|true|yes|on)$/i.test(process.env.GSC_DISABLE_ANALYTICS || "");
+  return !/^(1|true|yes|on)$/i.test(env("DISABLE_ANALYTICS") || "");
 }
 
-// Tier-2 setup scopes (only requested when GSC_ENABLE_SETUP is on). Least
+// Tier-2 setup scopes (only requested when SEARCHLIGHT_ENABLE_SETUP is on). Least
 // privilege: no tagmanager.manage.users / delete.containers.
 const SETUP_SCOPES = [
   "https://www.googleapis.com/auth/siteverification",
@@ -102,16 +102,16 @@ function readBundledClientFile(): ClientCreds | null {
 /**
  * Resolve the OAuth client credentials (Tier 0 bring-your-own, Tier 1 bundled).
  * Precedence (see SPEC §5.5/§5.6):
- *   1. GSC_OAUTH_CLIENT_ID + GSC_OAUTH_CLIENT_SECRET
- *   2. GSC_OAUTH_CREDENTIALS = path to client_secret.json (installed|web block)
- *   3. bundled Tier-1 client: GSC_BUNDLED_CLIENT_ID/SECRET, then bundled-client.json
+ *   1. SEARCHLIGHT_OAUTH_CLIENT_ID + SEARCHLIGHT_OAUTH_CLIENT_SECRET
+ *   2. SEARCHLIGHT_OAUTH_CREDENTIALS = path to client_secret.json (installed|web block)
+ *   3. bundled Tier-1 client: SEARCHLIGHT_BUNDLED_CLIENT_ID/SECRET, then bundled-client.json
  */
 function loadClientCredentials(): ClientCreds {
-  const id = process.env.GSC_OAUTH_CLIENT_ID;
-  const secret = process.env.GSC_OAUTH_CLIENT_SECRET;
+  const id = env("OAUTH_CLIENT_ID");
+  const secret = env("OAUTH_CLIENT_SECRET");
   if (id && secret) return { clientId: id, clientSecret: secret };
 
-  const credPath = process.env.GSC_OAUTH_CREDENTIALS;
+  const credPath = env("OAUTH_CREDENTIALS");
   if (credPath && fs.existsSync(credPath)) {
     const raw = JSON.parse(fs.readFileSync(credPath, "utf8"));
     const block = raw.installed || raw.web || raw;
@@ -120,16 +120,16 @@ function loadClientCredentials(): ClientCreds {
     }
   }
 
-  const bundledId = process.env.GSC_BUNDLED_CLIENT_ID;
-  const bundledSecret = process.env.GSC_BUNDLED_CLIENT_SECRET;
+  const bundledId = env("BUNDLED_CLIENT_ID");
+  const bundledSecret = env("BUNDLED_CLIENT_SECRET");
   if (bundledId && bundledSecret) return { clientId: bundledId, clientSecret: bundledSecret };
 
   const bundledFile = readBundledClientFile();
   if (bundledFile) return bundledFile;
 
   throw new Error(
-    "Missing OAuth client credentials. Set GSC_OAUTH_CLIENT_ID and GSC_OAUTH_CLIENT_SECRET, " +
-      "or set GSC_OAUTH_CREDENTIALS to the path of the client_secret JSON downloaded from Google Cloud."
+    "Missing OAuth client credentials. Set SEARCHLIGHT_OAUTH_CLIENT_ID and SEARCHLIGHT_OAUTH_CLIENT_SECRET, " +
+      "or set SEARCHLIGHT_OAUTH_CREDENTIALS to the path of the client_secret JSON downloaded from Google Cloud."
   );
 }
 
@@ -167,7 +167,7 @@ function saveToken(tokens: Credentials): void {
 export async function getAuthClient(): Promise<OAuth2Client> {
   if (!hasToken()) {
     throw new Error(
-      "Not authenticated. Run `gsc-mcp login`, or ask me to log you in (the auth_login tool)."
+      "Not authenticated. Run `searchlight login`, or ask me to log you in (the auth_login tool)."
     );
   }
   const client = newOAuthClient();
@@ -220,7 +220,7 @@ export async function login(): Promise<LoginResult> {
           reject(new Error(err ?? "No authorization code returned"));
           return;
         }
-        res.end("<h2>gsc-mcp connected &#10003;</h2><p>You can close this tab.</p>");
+        res.end("<h2>Searchlight connected &#10003;</h2><p>You can close this tab.</p>");
         resolve(code);
       } catch (e) {
         reject(e as Error);
@@ -275,21 +275,21 @@ export function setupState(): { state: SetupState; nextStep: string } {
     return {
       state: "needs_oauth_client",
       nextStep:
-        "Set GSC_OAUTH_CLIENT_ID and GSC_OAUTH_CLIENT_SECRET (or GSC_OAUTH_CREDENTIALS). " +
-        "Run `gsc-mcp setup` for a guided walkthrough.",
+        "Set SEARCHLIGHT_OAUTH_CLIENT_ID and SEARCHLIGHT_OAUTH_CLIENT_SECRET (or SEARCHLIGHT_OAUTH_CREDENTIALS). " +
+        "Run `searchlight setup` for a guided walkthrough.",
     };
   }
   if (!hasToken()) {
     return {
       state: "needs_login",
-      nextStep: "Sign in: run `gsc-mcp login`, or ask me to log you in (auth_login).",
+      nextStep: "Sign in: run `searchlight login`, or ask me to log you in (auth_login).",
     };
   }
   if (!pageSpeedKeySet()) {
     return {
       state: "needs_pagespeed_key",
       nextStep:
-        "Optional: set GSC_PAGESPEED_API_KEY to enable page-speed / Core Web Vitals tools.",
+        "Optional: set SEARCHLIGHT_PAGESPEED_API_KEY to enable page-speed / Core Web Vitals tools.",
     };
   }
   return { state: "ready", nextStep: "All set." };

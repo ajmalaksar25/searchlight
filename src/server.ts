@@ -5,7 +5,7 @@ import { registerAllTools } from "./tools/index.js";
 
 /** Build a fully wired MCP server. One ToolContext per server (per connection). */
 export function buildServer(): McpServer {
-  const server = new McpServer({ name: "gsc-mcp", version: "0.1.0" });
+  const server = new McpServer({ name: "searchlight", version: "0.1.0" });
   const ctx = new ToolContext();
   registerAllTools(server, ctx);
   return server;
@@ -16,5 +16,5 @@ export async function startServer(): Promise<void> {
   const transport = new StdioServerTransport();
   await server.connect(transport);
   // stderr only — stdout is the JSON-RPC channel.
-  console.error("gsc-mcp server running on stdio.");
+  console.error("searchlight server running on stdio.");
 }

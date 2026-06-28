@@ -23,7 +23,7 @@ const get = (k) => {
   return m ? m[1].trim().replace(/^["']|["']$/g, "") : "";
 };
 
-const pagespeedApiKey = get("PSI_API_KEY") || get("GSC_PAGESPEED_API_KEY");
+const pagespeedApiKey = get("PSI_API_KEY") || get("SEARCHLIGHT_PAGESPEED_API_KEY") || get("GSC_PAGESPEED_API_KEY");
 const cruxApiKey = get("CRUX_API_KEY") || pagespeedApiKey;
 
 if (!pagespeedApiKey) {
