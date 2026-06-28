@@ -11,6 +11,7 @@ import {
 } from "./config.js";
 import { gscClient } from "./gsc.js";
 import { refreshCoverage } from "./coverage.js";
+import { installSkill } from "./skill-install.js";
 
 const USAGE = `searchlight - autonomous technical SEO + analytics (MCP server)
 
@@ -28,6 +29,7 @@ Usage:
                              crawl <alias|siteUrl> [--max N]
                              crawl --all [--max N]
   searchlight serve            Start the MCP server over stdio (default)
+  searchlight skill install    Install the /searchlight skill into your AI client (--here for this project)
 
 Flags (no env vars needed — pass these in your MCP client's args, e.g.
 ["serve", "--setup"], and use the same flag when running \`login\`):
@@ -112,6 +114,17 @@ function manageSites(args: string[]): void {
     default:
       throw new Error(`Unknown sites subcommand: ${sub}\n\n${USAGE}`);
   }
+}
+
+function manageSkill(args: string[]): void {
+  const sub = args[0] ?? "install";
+  if (sub !== "install") {
+    throw new Error(`Unknown skill subcommand: ${sub}\n\nUsage: searchlight skill install [--here]`);
+  }
+  const here = args.includes("--here") || args.includes("--local");
+  const { target, files } = installSkill({ here });
+  console.error(`Installed the searchlight skill (${files.join(", ")}) to:\n  ${target}`);
+  console.error(`\nUse it in your AI client: /searchlight   (or /searchlight audit | setup | fix)`);
 }
 
 async function crawl(args: string[]): Promise<void> {
@@ -204,6 +217,9 @@ async function main(): Promise<void> {
       break;
     case "crawl":
       await crawl(argv.slice(1));
+      break;
+    case "skill":
+      manageSkill(argv.slice(1));
       break;
     case "-h":
     case "--help":

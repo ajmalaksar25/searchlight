@@ -1,19 +1,35 @@
 ---
-name: seo-setup
-description: End-to-end SEO setup and improvement for a website using the searchlight MCP server. Detects what's missing (indexing, sitemap, analytics, page speed, on-page issues), explains why in plain language with worry-levels, and — with the user's confirmation — provisions GA4/site-verification and fixes the site's code, then re-verifies. Use when the user wants to set up SEO/analytics for a site, fix indexing problems, or audit and improve a site's search quality.
+name: searchlight
+description: Searchlight — autonomous technical SEO and analytics for a website, using the searchlight MCP server for data + provisioning and the agent's repo access for fixes. Detects what's broken (indexing, canonical, redirect, sitemap, analytics, page speed, on-page), explains why in plain language with worry-levels, and — with the user's confirmation — fixes it in the repo, deploys, and verifies. Triggers on /searchlight (and /searchlight audit | setup | fix), or when the user wants to set up SEO/analytics, fix indexing, or audit a site's search quality.
 ---
 
-# seo-setup
+# Searchlight
 
-Run a website from "I don't know what's wrong" to "set up properly and improving", using the `searchlight` MCP server for data + provisioning and the agent's repo access for fixes. Meet the user where they are (beginner → pro). **Never act without confirming first.**
+Run a website from "I don't know what's wrong" to "fixed and verified", using the `searchlight`
+MCP server for data + provisioning and the agent's repo access for fixes. Meet the user where
+they are (beginner → pro). **Never act without confirming first.**
+
+## Commands
+
+Route on the first word of the argument; everything after is context (usually a site).
+
+| Invocation | Does | Stops at |
+|---|---|---|
+| `/searchlight audit [site]` | Read-only diagnosis: detect + explain, triaged. **No changes, no provisioning, no deploy.** | end of §2, then offer to fix |
+| `/searchlight setup [site]` *(or no arg)* | The full guided loop: interview → detect → confirm → provision → fix → deploy → verify | §5 |
+| `/searchlight fix [site]` | Assume already audited; go straight to plan → confirm → fix → deploy → verify | §5 |
+
+`audit` is the safe default to lead with for a nervous first-time user: show them the picture,
+then ask whether to fix. `setup` / `fix` change real things and always confirm first.
 
 ## 0. Prerequisites (check, don't assume)
 1. The `searchlight` MCP server must be connected. Call `auth_status` / `setup_status`.
    - Not authenticated → tell them to run `searchlight login --setup`, or use the `auth_login` tool.
-   - **For the full hands-off run, the server must be in setup mode** (`setupMode: true`, started with `--setup`) and the token must include the setup scopes (re-login with `--setup`). `--setup` is self-sufficient: it turns on provisioning (GA4/GTM/verification) **and** Search Console writes (sitemap submit) and reports `writeEnabled: true`. If `setupMode` is false or scopes are missing, say so up front and give the exact one-time command before proposing any write/provision step — don't discover it mid-run.
+   - **For the full hands-off run, the server must be in setup mode** (`setupMode: true`, started with `--setup`) and the token must include the setup scopes (re-login with `--setup`). `--setup` is self-sufficient: it turns on provisioning (GA4/GTM/verification) **and** Search Console writes (sitemap submit) and reports `writeEnabled: true`. If `setupMode` is false or scopes are missing, say so up front and give the exact one-time command before proposing any write/provision step — don't discover it mid-run. (For `audit`, read-only auth is enough; you don't need setup mode.)
 2. If the user's **site code is open in this workspace**, you can apply fixes. If not (hosted CMS), you give exact instructions instead of editing.
 
 ## 1. Interview FIRST (ask, confirm — don't barrel ahead)
+*(For `audit`, keep this to one line: which site? Then go straight to §2 and stop after.)*
 Ask only what you need, in plain language, and confirm before doing anything:
 - **Which site?** (`list_sites`; resolve an alias or pick.)
 - **What's the goal?** (rank a new site / fix indexing / add analytics / general audit.)
@@ -24,7 +40,7 @@ Ask only what you need, in plain language, and confirm before doing anything:
 Summarize their answers as a short plan and get a yes before executing.
 
 ## 2. Detect — build the picture
-- **First, before any fix: `snapshot_baseline <site>`.** This freezes today's health so the before→after is real data, not reconstructed after the fact. Always capture it at the start of a run — don't leave it as an afterthought.
+- **First, before any fix: `snapshot_baseline <site>`.** This freezes today's health so the before→after is real data, not reconstructed after the fact. Always capture it at the start of a run — don't leave it as an afterthought. *(For `audit`-only, the snapshot is optional but cheap; capture it so a later fix has a baseline.)*
 - `setup_status <site>` → GSC verified? matching GA4 property? sitemap submitted? Also confirms `setupMode`/`writeEnabled`.
 - `diagnose_site <site>` → triaged health (fix-now / worth-improving / fine / working) with why + what-to-do.
 - `refresh_coverage <site>` then `coverage_report` → which pages are/aren't indexed and why (run once to populate).
@@ -33,7 +49,7 @@ Summarize their answers as a short plan and get a yes before executing.
 - `page_speed <url>` → Core Web Vitals.
 - `ga_traffic` / `top_pages` / `find_opportunities` → is anyone arriving, and from where.
 
-Present findings as **plain-English, triaged** ("🔴 fix now: …, here's why, here's the fix"). Distinguish what to worry about vs what's normal (e.g. "Page with redirect" is usually fine).
+Present findings as **plain-English, triaged** ("fix now: …, here's why, here's the fix"). Distinguish what to worry about vs what's normal (e.g. "Page with redirect" is usually fine). **If the command was `audit`, stop here:** give the triaged picture and ask whether to fix the things worth fixing (which continues into §3).
 
 ## 3. Plan → confirm → execute
 Order the work by impact (fix blockers before discovery before polish). For each item, show the fix and confirm. Typical blockers, in order:
@@ -61,6 +77,7 @@ Detect the stack (`audit_page` reports `framework`; or read the repo). Apply the
 - **Canonical / meta / OG image / lang / viewport:** the framework's head/metadata API.
 - **Structured data:** add JSON-LD for the page type (Article/Product/FAQ).
 - **GA4 tag (gtag):** get the measurement ID from `create_ga4_property` (new property) or `ga_measurement_id` (existing property — fetch it, don't ask the user to paste it), then inject the gtag snippet into the site head/layout, consent-gated if the site has a consent banner (mirror the existing analytics setup, e.g. a Clarity component).
+
 **Deploy it — don't hand it back.** Code edits only reach the live site on the next build, so the run isn't done until it's deployed. Detect the method and do it (confirm ONCE upfront, since it changes the live site, then run without re-prompting):
 - **Vercel + git auto-deploy** (the common case): `git add` the edits, commit with a clear message, and `git push` — Vercel builds on push. Confirm the branch is the production branch first.
 - **Vercel CLI** (linked `.vercel`/no git auto-deploy): `vercel --prod`.

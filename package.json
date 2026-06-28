@@ -8,6 +8,7 @@
   },
   "files": [
     "dist",
+    "skill",
     "bundled-client.json",
     "bundled-keys.json",
     "README.md",
