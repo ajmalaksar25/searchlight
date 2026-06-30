@@ -1,5 +1,8 @@
 import { gscClient, runSearchAnalytics, rowsToObjects, daysAgo, type AnalyticsRow } from "./gsc.js";
 import { readSiteJson, writeSiteJson, quotaUsedToday, addQuota } from "./cache.js";
+import { fetchText, extractLocs } from "./util/web.js";
+
+const COVERAGE_UA = "searchlight coverage crawler";
 
 /**
  * Reconstructs the "Page indexing" report the GSC API will not export in bulk.
@@ -32,23 +35,6 @@ type CoverageCache = Record<string, InspectionRecord>;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-function decodeEntities(s: string): string {
-  return s
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'");
-}
-
-function extractLocs(xml: string): string[] {
-  const out: string[] = [];
-  const re = /<loc>\s*([^<]+?)\s*<\/loc>/gi;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(xml))) out.push(decodeEntities(m[1]));
-  return out;
-}
-
 function domainMatches(siteUrl: string, url: string): boolean {
   try {
     if (siteUrl.startsWith("sc-domain:")) {
@@ -62,12 +48,6 @@ function domainMatches(siteUrl: string, url: string): boolean {
   }
 }
 
-async function fetchText(url: string): Promise<string> {
-  const res = await fetch(url, { headers: { "User-Agent": "searchlight coverage crawler" } });
-  if (!res.ok) throw new Error(`fetch ${url} -> ${res.status}`);
-  return res.text();
-}
-
 /** Recursively expand a sitemap (handles sitemap-index files) into page URLs. */
 async function fetchSitemapUrls(
   sitemapUrl: string,
@@ -77,7 +57,7 @@ async function fetchSitemapUrls(
   if (depth > 2 || acc.size >= CANDIDATE_CAP) return;
   let xml: string;
   try {
-    xml = await fetchText(sitemapUrl);
+    xml = await fetchText(sitemapUrl, COVERAGE_UA);
   } catch {
     return;
   }

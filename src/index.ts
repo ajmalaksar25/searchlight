@@ -11,6 +11,7 @@ import {
 } from "./config.js";
 import { gscClient } from "./gsc.js";
 import { refreshCoverage } from "./coverage.js";
+import { crawlSite } from "./crawl.js";
 import { installSkill } from "./skill-install.js";
 
 const USAGE = `searchlight - autonomous technical SEO + analytics (MCP server)
@@ -25,9 +26,11 @@ Usage:
                              sites add <alias> <siteUrl>
                              sites remove <alias>
                              sites default <alias|siteUrl>
-  searchlight crawl            Crawl coverage headlessly (schedulable):
+  searchlight crawl            Advance the coverage crawl (URL Inspection, schedulable):
                              crawl <alias|siteUrl> [--max N]
                              crawl --all [--max N]
+  searchlight crawl-site       Crawl the live site directly (no quota, schedulable):
+                             crawl-site <alias|siteUrl> [--max N] [--reset]
   searchlight serve            Start the MCP server over stdio (default)
   searchlight skill install    Install the /searchlight skill into your AI client (--here for this project)
 
@@ -168,6 +171,42 @@ async function crawl(args: string[]): Promise<void> {
   }
 }
 
+async function crawlSiteCmd(args: string[]): Promise<void> {
+  const all = args.includes("--all");
+  const reset = args.includes("--reset");
+  const maxIdx = args.indexOf("--max");
+  const max = maxIdx >= 0 ? Math.max(1, parseInt(args[maxIdx + 1] ?? "150", 10) || 150) : 150;
+  const positional = args.filter((a, i) => !a.startsWith("--") && args[i - 1] !== "--max");
+
+  let sites: string[];
+  if (all) {
+    const gsc = await gscClient();
+    const res = await gsc.sites.list();
+    sites = (res.data.siteEntry ?? []).map((s) => s.siteUrl).filter((u): u is string => Boolean(u));
+  } else {
+    const target = positional[0];
+    if (!target) {
+      throw new Error("Usage: searchlight crawl-site <alias|siteUrl> [--max N] [--reset]  |  crawl-site --all [--max N]");
+    }
+    sites = [resolveAlias(target)];
+  }
+
+  for (const siteUrl of sites) {
+    console.error(`\nCrawling site ${siteUrl} (max ${max}${reset ? ", reset" : ""})...`);
+    try {
+      const p = await crawlSite(siteUrl, { maxPages: max, reset });
+      console.error(
+        `  crawled ${p.crawledThisRun} (total ${p.totalCrawled}), queued ${p.frontierRemaining}, ` +
+          `redirects ${p.redirectsFound}, robots-skipped ${p.skippedByRobots}, errors ${p.errors}`
+      );
+      console.error(`  status: ${JSON.stringify(p.statusCounts)}`);
+      console.error(`  ${p.note}`);
+    } catch (e) {
+      console.error(`  Error: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+}
+
 /**
  * Parse global flags (an easier alternative to env vars — usable in an MCP
  * client's args array, e.g. ["serve", "--setup"]) and apply them by setting the
@@ -217,6 +256,9 @@ async function main(): Promise<void> {
       break;
     case "crawl":
       await crawl(argv.slice(1));
+      break;
+    case "crawl-site":
+      await crawlSiteCmd(argv.slice(1));
       break;
     case "skill":
       manageSkill(argv.slice(1));

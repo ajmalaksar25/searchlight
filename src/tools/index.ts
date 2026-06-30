@@ -6,6 +6,7 @@ import { register as analytics } from "./analytics.js";
 import { register as insights } from "./insights.js";
 import { register as inspection } from "./inspection.js";
 import { register as coverage } from "./coverage.js";
+import { register as crawl } from "./crawl.js";
 import { register as diagnose } from "./diagnose.js";
 import { register as audit } from "./audit.js";
 import { register as speed } from "./speed.js";
@@ -27,6 +28,7 @@ const MODULES: ToolModule[] = [
   insights,
   inspection,
   coverage,
+  crawl,
   diagnose,
   audit,
   speed,
