@@ -1,5 +1,6 @@
 import type { Finding, Severity } from "./diagnose.js";
 import { loadCrawl, type CrawlRecord } from "./crawl.js";
+import { normKey } from "./util/web.js";
 
 /**
  * Turns a crawl (crawl.json, produced by crawl_site) into a triaged, site-wide
@@ -34,19 +35,6 @@ export interface SiteAudit {
     mostLinked: { url: string; inLinks: number }[];
   };
   findings: Finding[];
-}
-
-/** Normalize for graph matching + canonical compare: lower host, strip trailing slash + fragment. */
-function normKey(u: string, base?: string): string {
-  try {
-    const url = new URL(u, base);
-    url.hash = "";
-    url.hostname = url.hostname.toLowerCase();
-    if (url.pathname.length > 1 && url.pathname.endsWith("/")) url.pathname = url.pathname.slice(0, -1);
-    return url.href;
-  } catch {
-    return u;
-  }
 }
 
 function pathOf(u: string): string {

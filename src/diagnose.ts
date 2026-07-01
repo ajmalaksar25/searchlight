@@ -1,5 +1,7 @@
 import { gscClient, runSearchAnalytics, daysAgo, rowsToObjects, type AnalyticsRow } from "./gsc.js";
 import { loadCoverage, bucketCoverage } from "./coverage.js";
+import { loadCrawl, parseRobots } from "./crawl.js";
+import { extractLocs, normKey } from "./util/web.js";
 import { pagespeedApiKey } from "./keys.js";
 
 /**
@@ -104,6 +106,11 @@ const STATE_MAP: Record<string, { severity: Severity; why: string; whatToDo: str
     why: "The page has a 'noindex' instruction telling Google to keep it out of search.",
     whatToDo: "Remove the noindex tag if you want this page to rank.",
   },
+  "Server error (5xx)": {
+    severity: "critical",
+    why: "The page returned a server error when Google tried to crawl it, so it couldn't be read or indexed. Persistent 5xx gets pages dropped.",
+    whatToDo: "Fix the server error so the URL returns 200, then request indexing.",
+  },
 };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -112,6 +119,7 @@ interface Probe {
   status: number;
   location?: string;
   locCount?: number;
+  body?: string; // kept for 200s so callers can parse robots rules / sitemap locs
 }
 
 async function probe(url: string): Promise<Probe> {
@@ -122,7 +130,7 @@ async function probe(url: string): Promise<Probe> {
     }
     if (res.status === 200) {
       const body = await res.text();
-      return { status: 200, locCount: (body.match(/<loc>/gi) ?? []).length };
+      return { status: 200, locCount: (body.match(/<loc>/gi) ?? []).length, body };
     }
     return { status: res.status };
   } catch {
@@ -178,11 +186,15 @@ export async function diagnoseSite(siteUrl: string): Promise<Diagnosis> {
   const hosts = candidateHosts(siteUrl);
   let sitemapOk = false;
   let sitemapRedirects = false;
+  const sitemapLocs: string[] = [];
+  const robotsDisallow: Record<string, string[]> = {};
   for (const host of hosts) {
     const sm = await probe(`https://${host}/sitemap.xml`);
     if (sm.status === 200 && (sm.locCount ?? 0) > 0) sitemapOk = true;
     else if (sm.status >= 300 && sm.status < 400) sitemapRedirects = true;
+    if (sm.status === 200 && sm.body) sitemapLocs.push(...extractLocs(sm.body));
     const rb = await probe(`https://${host}/robots.txt`);
+    if (rb.status === 200 && rb.body) robotsDisallow[host] = parseRobots(rb.body).disallow;
     if ([400, 401, 403].includes(rb.status) || rb.status >= 500) {
       findings.push({
         id: `robots:${host}`,
@@ -224,6 +236,94 @@ export async function diagnoseSite(siteUrl: string): Promise<Diagnosis> {
     }
   } catch {
     /* ignore */
+  }
+
+  // --- cross-source reconciliation (only when a crawl exists) ---
+  // site_audit owns pure-crawl findings; here we ONLY reconcile crawl × sitemap ×
+  // robots × GSC — mismatches no single source can see. Degrades to a no-op when
+  // crawl_site hasn't run, so diagnose_site is unchanged without a crawl.
+  const crawl = loadCrawl(siteUrl);
+  const crawlRecs = Object.values(crawl);
+  if (crawlRecs.length > 0) {
+    const byKey = new Map(crawlRecs.map((r) => [normKey(r.url), r]));
+    const uniqSitemap = [...new Set(sitemapLocs)];
+    const blockedByRobots = (url: string): boolean => {
+      let host: string, path: string;
+      try {
+        const u = new URL(url);
+        host = u.host;
+        path = u.pathname + u.search;
+      } catch {
+        return false;
+      }
+      const rules = robotsDisallow[host];
+      return !!rules?.some((rule) => rule && path.startsWith(rule.replace(/\*.*$/, "")));
+    };
+
+    const noidxInSitemap = uniqSitemap.filter((u) => byKey.get(normKey(u))?.noindex);
+    if (noidxInSitemap.length) {
+      findings.push({
+        id: "reconcile:sitemap-noindex",
+        severity: "warning",
+        title: `${noidxInSitemap.length} sitemap URL${noidxInSitemap.length > 1 ? "s are" : " is"} set to noindex`,
+        why: "You're telling Google to index these (via the sitemap) and to NOT index them (via noindex) at the same time — a contradictory signal that wastes crawl budget.",
+        whatToDo: "Either remove the noindex (if they should rank) or drop them from the sitemap (if they shouldn't).",
+        count: noidxInSitemap.length,
+        sampleUrls: noidxInSitemap.slice(0, 10),
+      });
+    }
+
+    const blocked = uniqSitemap.filter(blockedByRobots);
+    if (blocked.length) {
+      findings.push({
+        id: "reconcile:sitemap-robots",
+        severity: "critical",
+        title: `${blocked.length} sitemap URL${blocked.length > 1 ? "s are" : " is"} blocked by robots.txt`,
+        why: "Your sitemap asks Google to index these, but robots.txt forbids crawling them — so Google can't read them and won't index them.",
+        whatToDo: "Remove the robots.txt Disallow for these paths, or drop them from the sitemap.",
+        count: blocked.length,
+        sampleUrls: blocked.slice(0, 10),
+      });
+    }
+
+    const canonBad = crawlRecs.filter((r) => {
+      if (!r.canonical) return false;
+      let target;
+      try {
+        target = byKey.get(normKey(new URL(r.canonical, r.finalUrl).href));
+      } catch {
+        return false;
+      }
+      return !!target && normKey(target.url) !== normKey(r.url) && (target.noindex || target.status >= 400);
+    });
+    if (canonBad.length) {
+      findings.push({
+        id: "reconcile:canonical-nonindexable",
+        severity: "warning",
+        title: `${canonBad.length} page${canonBad.length > 1 ? "s" : ""} canonicalize to a non-indexable URL`,
+        why: "These pages point their canonical at a URL that is itself noindexed or broken — so Google is told the 'real' version is one it can't index, and may drop both.",
+        whatToDo: "Point the canonical at a live, indexable URL (usually the page itself).",
+        count: canonBad.length,
+        sampleUrls: canonBad.slice(0, 10).map((r) => r.url),
+      });
+    }
+
+    const indexedBroken = Object.values(cov).filter((c) => {
+      if (c.verdict !== "PASS") return false;
+      const r = byKey.get(normKey(c.url));
+      return !!r && (r.status >= 400 || r.noindex);
+    });
+    if (indexedBroken.length) {
+      findings.push({
+        id: "reconcile:indexed-broken",
+        severity: "critical",
+        title: `${indexedBroken.length} page${indexedBroken.length > 1 ? "s" : ""} Google has indexed ${indexedBroken.length > 1 ? "are" : "is"} now broken or noindexed`,
+        why: "Google still lists these, but the live page now returns an error or says noindex — they'll fall out of search and users may hit dead pages.",
+        whatToDo: "Restore the pages (or remove the noindex); if intentionally gone, 301 them to a relevant live page.",
+        count: indexedBroken.length,
+        sampleUrls: indexedBroken.slice(0, 10).map((c) => c.url),
+      });
+    }
   }
 
   // --- traffic ---

@@ -117,12 +117,13 @@ function originsFor(siteUrl: string): string[] {
 
 // ---------- robots.txt (simplified: User-agent: * group only) ----------
 
-interface Robots {
+export interface Robots {
   disallow: string[];
   sitemaps: string[];
 }
 
-function parseRobots(text: string): Robots {
+/** Minimal robots.txt parser: Disallow paths + Sitemap: directives for the `*` group. */
+export function parseRobots(text: string): Robots {
   const disallow: string[] = [];
   const sitemaps: string[] = [];
   let active = false;
