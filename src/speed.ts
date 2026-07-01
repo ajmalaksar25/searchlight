@@ -24,6 +24,8 @@ export interface SpeedResult {
     inpMs: number | null;
     cls: number | null;
   };
+  /** Top Lighthouse opportunities with estimated savings (biggest wins first). */
+  opportunities: { id: string; title: string; savingsMs: number }[];
   findings: Finding[];
 }
 
@@ -76,6 +78,17 @@ export async function pageSpeed(url: string, strategy: "mobile" | "desktop" = "m
     fcpMs: num("first-contentful-paint"),
   };
 
+  // Lighthouse "opportunities" (audits with estimated ms savings), biggest first.
+  const opportunities: { id: string; title: string; savingsMs: number }[] = [];
+  for (const [id, a] of Object.entries<any>(audits)) {
+    const savings = a?.details?.overallSavingsMs;
+    if (typeof savings === "number" && savings >= 50) {
+      opportunities.push({ id, title: a.title ?? id, savingsMs: Math.round(savings) });
+    }
+  }
+  opportunities.sort((x, y) => y.savingsMs - x.savingsMs);
+  const topOpps = opportunities.slice(0, 8);
+
   const le = data.loadingExperience?.metrics ?? {};
   const lcp = (le.LARGEST_CONTENTFUL_PAINT_MS as CruxMetric)?.percentile ?? null;
   const inp = (le.INTERACTION_TO_NEXT_PAINT as CruxMetric)?.percentile ?? null;
@@ -120,9 +133,11 @@ export async function pageSpeed(url: string, strategy: "mobile" | "desktop" = "m
         "Set explicit width/height on images and reserve space for ads/embeds.");
   }
   if (lab.performanceScore != null && lab.performanceScore < 50) {
+    const top = topOpps.slice(0, 2).map((o) => `${o.title} (~${(o.savingsMs / 1000).toFixed(1)}s)`).join("; ");
     add("warning", "speed:score", `Low performance score (${lab.performanceScore}/100 in lab)`,
-      "Overall the page is slow to load in testing.", "Work through the PageSpeed Insights opportunities for this URL.");
+      "Overall the page is slow to load in testing, which hurts both conversions and ranking.",
+      top ? `Biggest wins: ${top}.` : "Work through the PageSpeed Insights opportunities for this URL.");
   }
 
-  return { url, strategy, fetchedAt: new Date().toISOString(), lab, field, findings };
+  return { url, strategy, fetchedAt: new Date().toISOString(), lab, field, opportunities: topOpps, findings };
 }
