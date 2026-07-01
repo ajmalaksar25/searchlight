@@ -151,12 +151,12 @@ export const register: ToolModule = (server, ctx) => {
       title: "Deep link to Search Console UI",
       description:
         "Return the exact Search Console UI URL for a report the API does not expose " +
-        "(removals, manual actions, security issues, page-indexing). Hand this to the user to act on.",
+        "(removals, manual actions, security issues, page-indexing, crawl stats). Hand this to the user to act on.",
       inputSchema: {
         siteUrl: siteUrlOptional,
         report: z
-          .enum(["removals", "manualActions", "securityIssues", "pageIndexing", "overview"])
-          .describe("Which Search Console report to open."),
+          .enum(["removals", "manualActions", "securityIssues", "pageIndexing", "crawlStats", "overview"])
+          .describe("Which Search Console report to open. 'crawlStats' = Settings → Crawl stats (Googlebot crawl volume/response, UI-only)."),
       },
     },
     async ({ siteUrl, report }) => {

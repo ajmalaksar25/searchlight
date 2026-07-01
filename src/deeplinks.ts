@@ -8,6 +8,7 @@ export type DeepLinkReport =
   | "manualActions"
   | "securityIssues"
   | "pageIndexing"
+  | "crawlStats"
   | "overview";
 
 const PATHS: Record<DeepLinkReport, string> = {
@@ -15,6 +16,7 @@ const PATHS: Record<DeepLinkReport, string> = {
   manualActions: "manual-actions",
   securityIssues: "security-issues",
   pageIndexing: "index",
+  crawlStats: "settings/crawl-stats", // Crawl Stats (Settings) — no API, UI only
   overview: "",
 };
 

@@ -12,6 +12,10 @@ test("pageIndexing maps to the /index report", () => {
   assert.match(buildDeepLink("https://example.com/", "pageIndexing"), /search-console\/index\?/);
 });
 
+test("crawlStats targets the Settings crawl-stats report", () => {
+  assert.match(buildDeepLink("sc-domain:example.com", "crawlStats"), /search-console\/settings\/crawl-stats\?/);
+});
+
 test("overview has no sub-path", () => {
   const url = buildDeepLink("https://example.com/", "overview");
   assert.match(url, /search-console\?resource_id=/);
