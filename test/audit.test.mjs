@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { analyzeHtml } from "../dist/audit.js";
+import { analyzeHtml, fixFor } from "../dist/audit.js";
 
 test("analyzeHtml flags invalid JSON-LD, missing required props, and collects hreflang", () => {
   const html = `<html><head>
@@ -22,6 +22,13 @@ test("analyzeHtml: complete schema produces no issues", () => {
   assert.equal(sig.schemaInvalid, 0);
   assert.deepEqual(sig.schemaIssues, []);
   assert.ok(sig.jsonLdTypes.includes("Article"));
+});
+
+test("fixFor emits framework-aware snippets", () => {
+  assert.match(fixFor("canonical:missing", "Next.js"), /alternates:\s*\{\s*canonical/);
+  assert.match(fixFor("canonical:missing", "Astro"), /Astro\.url\.href/);
+  assert.match(fixFor("canonical:missing", null), /<link rel="canonical"/);
+  assert.equal(fixFor("links:orphan", "Next.js"), undefined, "no snippet for non-code findings");
 });
 
 test("analyzeHtml handles @graph arrays and array @type", () => {

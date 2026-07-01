@@ -2,6 +2,7 @@ import { z } from "zod";
 import { ok, fail } from "../util/result.js";
 import { crawlSite } from "../crawl.js";
 import { siteAudit } from "../siteaudit.js";
+import { siteAuditReport } from "../report.js";
 import { siteUrlOptional, type ToolModule } from "./shared.js";
 
 /**
@@ -63,6 +64,26 @@ export const register: ToolModule = (server, ctx) => {
       try {
         const { siteUrl: resolved } = ctx.resolveSite(siteUrl);
         return ok(siteAudit(resolved));
+      } catch (e) {
+        return fail(e);
+      }
+    }
+  );
+
+  server.registerTool(
+    "export_report",
+    {
+      title: "Export the site audit as a shareable Markdown report",
+      description:
+        "Format the crawl's site_audit into a single, copy-paste Markdown report (for a founder, developer, or " +
+        "client): grade, metrics, and every finding triaged with its fix and example URLs. Run crawl_site first. " +
+        "Returns Markdown text ready to paste into a doc, issue, or email.",
+      inputSchema: { siteUrl: siteUrlOptional },
+    },
+    async ({ siteUrl }) => {
+      try {
+        const { siteUrl: resolved } = ctx.resolveSite(siteUrl);
+        return ok(siteAuditReport(resolved).markdown);
       } catch (e) {
         return fail(e);
       }

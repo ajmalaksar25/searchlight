@@ -18,6 +18,7 @@ export interface Finding {
   why: string; // plain English, no jargon
   whatToDo: string;
   technical?: string; // for the pros
+  fix?: string; // framework-aware code snippet (so any harness gets the fix as data)
   count?: number;
   sampleUrls?: string[];
 }

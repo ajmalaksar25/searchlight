@@ -231,6 +231,47 @@ export function analyzeHtml(
   };
 }
 
+/**
+ * A framework-aware code snippet for a given finding, emitted as DATA so any
+ * harness (not just Claude Code) gets a concrete fix. Covers the common on-page
+ * findings for Next.js / Astro, with an HTML fallback.
+ */
+export function fixFor(id: string, framework: string | null): string | undefined {
+  const fw = (framework || "").toLowerCase();
+  const isNext = fw.includes("next");
+  const isAstro = fw.includes("astro");
+  switch (id) {
+    case "title:missing":
+      return isNext
+        ? "export const metadata = { title: 'A unique, descriptive page title' };"
+        : "<title>A unique, descriptive page title</title>";
+    case "meta:missing":
+      return isNext
+        ? "export const metadata = { description: 'A unique 150-160 character summary of this page.' };"
+        : '<meta name="description" content="A unique 150-160 character summary of this page." />';
+    case "canonical:missing":
+      if (isNext) return "// app/<route>/page.tsx\nexport const metadata = {\n  alternates: { canonical: 'https://example.com/this-path' },\n};";
+      if (isAstro) return '<!-- in <head> -->\n<link rel="canonical" href={Astro.url.href} />';
+      return '<link rel="canonical" href="https://example.com/this-path" />';
+    case "mobile:viewport":
+      return isNext
+        ? "// Next adds viewport by default; only if you overrode it:\nexport const viewport = { width: 'device-width', initialScale: 1 };"
+        : '<meta name="viewport" content="width=device-width, initial-scale=1" />';
+    case "html:lang":
+      return isNext
+        ? "// app/layout.tsx\nreturn <html lang=\"en\">{children}</html>;"
+        : '<html lang="en">';
+    case "social:image":
+      return isNext
+        ? "export const metadata = {\n  openGraph: { images: ['/og.png'] },\n  twitter: { card: 'summary_large_image', images: ['/og.png'] },\n};"
+        : '<meta property="og:image" content="https://example.com/og.png" />\n<meta name="twitter:image" content="https://example.com/og.png" />';
+    case "schema:none":
+      return '<script type="application/ld+json">\n{\n  "@context": "https://schema.org",\n  "@type": "Article",\n  "headline": "..."\n}\n</script>';
+    default:
+      return undefined;
+  }
+}
+
 export async function auditPage(rawUrl: string): Promise<AuditResult> {
   const findings: Finding[] = [];
   const add = (
@@ -357,6 +398,12 @@ export async function auditPage(rawUrl: string): Promise<AuditResult> {
   // --- analytics tag ---
   if (!sig.analytics.ga4 && !sig.analytics.gtm && !sig.analytics.universal) {
     add("info", "analytics:missing", "No Google Analytics tag found", "This page isn't being measured — you can't see its traffic or behaviour in Analytics.", "Add the GA4 tag (gtag.js) so this page is tracked.");
+  }
+
+  // --- attach framework-aware fix snippets (emitted as data for any harness) ---
+  for (const f of findings) {
+    const fix = fixFor(f.id, sig.framework);
+    if (fix) f.fix = fix;
   }
 
   // --- score ---

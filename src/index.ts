@@ -13,6 +13,7 @@ import { gscClient } from "./gsc.js";
 import { refreshCoverage } from "./coverage.js";
 import { crawlSite } from "./crawl.js";
 import { siteAudit } from "./siteaudit.js";
+import { siteAuditReport } from "./report.js";
 import { installSkill } from "./skill-install.js";
 
 const USAGE = `searchlight - autonomous technical SEO + analytics (MCP server)
@@ -34,6 +35,8 @@ Usage:
                              crawl-site <alias|siteUrl> [--max N] [--reset]
   searchlight audit-site       Site-wide technical SEO report from the crawl:
                              audit-site <alias|siteUrl>
+  searchlight report           Export the site audit as Markdown (to stdout):
+                             report <alias|siteUrl>  > audit.md
   searchlight serve            Start the MCP server over stdio (default)
   searchlight skill install    Install the /searchlight skill into your AI client (--here for this project)
 
@@ -279,6 +282,12 @@ async function main(): Promise<void> {
     case "audit-site":
       auditSiteCmd(argv.slice(1));
       break;
+    case "report": {
+      const target = argv.slice(1).find((a) => !a.startsWith("--"));
+      if (!target) throw new Error("Usage: searchlight report <alias|siteUrl>  (run crawl-site first)");
+      process.stdout.write(siteAuditReport(resolveAlias(target)).markdown + "\n");
+      break;
+    }
     case "skill":
       manageSkill(argv.slice(1));
       break;
