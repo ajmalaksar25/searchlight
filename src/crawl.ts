@@ -1,6 +1,6 @@
-import * as cheerio from "cheerio";
 import { readSiteJson, writeSiteJson } from "./cache.js";
 import { collectCandidates } from "./coverage.js";
+import { analyzeHtml } from "./audit.js";
 import { fetchText, extractLocs } from "./util/web.js";
 
 /**
@@ -42,7 +42,8 @@ export interface CrawlRecord {
   metaRobots: string | null;
   noindex: boolean; // meta robots OR X-Robots-Tag
   nofollow: boolean;
-  internalLinks: string[]; // normalized, same-site, deduped
+  indexable: boolean; // 200 + not noindex + not robots-disallowed
+  internalLinks: string[]; // normalized, same-site (crawl boundary), deduped
   externalLinkCount: number;
   depth: number;
   fetchedAt: string;
@@ -239,6 +240,7 @@ function analyze(
   fr: FetchResult,
   inSite: (u: string) => boolean
 ): CrawlRecord {
+  const xr = (fr.xRobotsTag || "").toLowerCase();
   const rec: CrawlRecord = {
     url: requestUrl,
     status: fr.status,
@@ -250,8 +252,9 @@ function analyze(
     title: null,
     canonical: null,
     metaRobots: null,
-    noindex: false,
-    nofollow: false,
+    noindex: xr.includes("noindex"), // header applies even to non-HTML / non-200
+    nofollow: xr.includes("nofollow"),
+    indexable: false,
     internalLinks: [],
     externalLinkCount: 0,
     depth,
@@ -259,31 +262,19 @@ function analyze(
     error: fr.error,
   };
 
-  const xr = (fr.xRobotsTag || "").toLowerCase();
-  if (xr.includes("noindex")) rec.noindex = true;
-  if (xr.includes("nofollow")) rec.nofollow = true;
-
   if (fr.status === 200 && fr.body) {
-    const $ = cheerio.load(fr.body);
-    rec.title = ($("title").first().text() || "").trim() || null;
-    rec.canonical = $('link[rel="canonical"]').attr("href")?.trim() || null;
-    const mr = ($('meta[name="robots"]').attr("content") || "").toLowerCase().trim();
-    rec.metaRobots = mr || null;
-    if (mr.includes("noindex")) rec.noindex = true;
-    if (mr.includes("nofollow")) rec.nofollow = true;
-
-    const internal = new Set<string>();
-    let external = 0;
-    $("a[href]").each((_, el) => {
-      const href = $(el).attr("href") || "";
-      if (href.startsWith("#") || href.startsWith("mailto:") || href.startsWith("tel:") || href.startsWith("javascript:")) return;
-      const abs = normalize(href, fr.finalUrl);
-      if (!abs) return;
-      if (inSite(abs)) internal.add(abs);
-      else external++;
-    });
-    rec.internalLinks = [...internal];
-    rec.externalLinkCount = external;
+    // Same parser as auditPage. The crawler already skipped robots-disallowed
+    // URLs before fetching, so robotsDisallowed is false for anything analyzed.
+    const sig = analyzeHtml(fr.body, { url: fr.finalUrl, status: fr.status, xRobotsTag: fr.xRobotsTag });
+    rec.title = sig.title;
+    rec.canonical = sig.canonical;
+    rec.metaRobots = sig.metaRobots;
+    rec.noindex = sig.noindex;
+    rec.nofollow = sig.nofollow;
+    rec.indexable = sig.indexable;
+    // Re-filter ALL links through the crawl boundary (broader than same-host for domain props).
+    rec.internalLinks = sig.links.filter(inSite);
+    rec.externalLinkCount = sig.links.length - rec.internalLinks.length;
   }
   return rec;
 }

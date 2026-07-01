@@ -6,6 +6,10 @@ import type { Severity, Finding } from "./diagnose.js";
  * plain-English "why + what to do" shape as diagnose_site. Covers the on-page,
  * content, social-preview, structured-data, and analytics-tag layers of a
  * professional audit. Generic checks — nothing hardcoded per site. See SPEC §9.
+ *
+ * The HTML parsing lives in analyzeHtml() so the site crawler (crawl.ts) and the
+ * single-page auditor share ONE analyzer. auditPage() adds the fetch + the
+ * plain-English findings on top of those signals.
  */
 export interface AuditResult {
   url: string;
@@ -20,6 +24,8 @@ export interface AuditResult {
     metaDescription: string | null;
     metaDescriptionLength: number;
     canonical: string | null;
+    noindex: boolean;
+    indexable: boolean;
     h1Count: number;
     wordCount: number;
     framework: string | null;
@@ -50,6 +56,133 @@ function detectFramework(html: string, $: cheerio.CheerioAPI): string | null {
   const gen = $('meta[name="generator"]').attr("content");
   if (gen) return gen;
   return null;
+}
+
+/** Parsed on-page signals shared by auditPage and the site crawler. */
+export interface PageSignals {
+  title: string | null;
+  titleLength: number;
+  metaDescription: string | null;
+  metaDescriptionLength: number;
+  canonical: string | null;
+  metaRobots: string | null;
+  xRobotsTag: string | null;
+  noindex: boolean; // meta robots OR X-Robots-Tag
+  nofollow: boolean;
+  indexable: boolean; // 200 + not noindex + not robots-disallowed
+  h1Count: number;
+  hasViewport: boolean;
+  htmlLang: string | null;
+  framework: string | null;
+  analytics: { ga4: string | null; gtm: string | null; universal: string | null };
+  openGraph: Record<string, string | null>;
+  twitter: Record<string, string | null>;
+  jsonLdTypes: string[];
+  imagesTotal: number;
+  imagesMissingAlt: number;
+  links: string[]; // ALL unique, fragment-stripped, absolute http(s) links (for the crawler's own boundary)
+  internalLinks: string[]; // subset of links that are same-HOST as this page (auditor's notion of internal)
+  externalLinkCount: number;
+  wordCount: number;
+}
+
+/**
+ * Parse a fetched HTML document into the shared signal set. `opts.status`,
+ * `opts.xRobotsTag`, and `opts.robotsDisallowed` let the caller fuse the final
+ * indexability verdict (the crawler knows robots.txt; auditPage does not).
+ */
+export function analyzeHtml(
+  html: string,
+  opts: { url: string; status?: number; xRobotsTag?: string | null; robotsDisallowed?: boolean }
+): PageSignals {
+  const $ = cheerio.load(html);
+  const analytics = detectAnalytics(html);
+  const framework = detectFramework(html, $);
+
+  const title = ($("title").first().text() || "").trim() || null;
+  const metaDescription = $('meta[name="description"]').attr("content")?.trim() || null;
+  const canonical = $('link[rel="canonical"]').attr("href")?.trim() || null;
+  const metaRobots = ($('meta[name="robots"]').attr("content") || "").toLowerCase().trim() || null;
+  const xr = (opts.xRobotsTag || "").toLowerCase();
+  const noindex = (metaRobots?.includes("noindex") ?? false) || xr.includes("noindex");
+  const nofollow = (metaRobots?.includes("nofollow") ?? false) || xr.includes("nofollow");
+  const indexable = (opts.status ?? 200) === 200 && !noindex && !opts.robotsDisallowed;
+
+  const h1Count = $("h1").length;
+  const hasViewport = $('meta[name="viewport"]').length > 0;
+  const htmlLang = $("html").attr("lang") || null;
+
+  const og = (k: string) => $(`meta[property="og:${k}"]`).attr("content")?.trim() || null;
+  const openGraph = { title: og("title"), description: og("description"), image: og("image"), url: og("url"), type: og("type") };
+  const tw = (k: string) => $(`meta[name="twitter:${k}"]`).attr("content")?.trim() || null;
+  const twitter = { card: tw("card"), title: tw("title"), image: tw("image") };
+
+  const jsonLdTypes: string[] = [];
+  $('script[type="application/ld+json"]').each((_, el) => {
+    try {
+      const data = JSON.parse($(el).contents().text());
+      const arr = Array.isArray(data) ? data : data["@graph"] ?? [data];
+      for (const node of Array.isArray(arr) ? arr : [arr]) {
+        const t = node?.["@type"];
+        if (t) jsonLdTypes.push(...(Array.isArray(t) ? t : [t]));
+      }
+    } catch {
+      /* invalid JSON-LD */
+    }
+  });
+
+  const imagesTotal = $("img").length;
+  const imagesMissingAlt = $("img").filter((_, el) => !($(el).attr("alt") || "").trim()).length;
+
+  const host = safeHost(opts.url);
+  const allLinks = new Set<string>();
+  $("a[href]").each((_, el) => {
+    const href = $(el).attr("href") || "";
+    if (href.startsWith("#") || href.startsWith("mailto:") || href.startsWith("tel:") || href.startsWith("javascript:")) return;
+    try {
+      const u = new URL(href, opts.url);
+      if (u.protocol !== "http:" && u.protocol !== "https:") return;
+      u.hash = "";
+      allLinks.add(u.href);
+    } catch {
+      /* unparseable href */
+    }
+  });
+  const internal = [...allLinks].filter((l) => {
+    const h = safeHost(l);
+    return !!h && !!host && h === host;
+  });
+  const externalLinkCount = allLinks.size - internal.length;
+
+  $("script, style, noscript").remove();
+  const wordCount = ($("body").text().trim().match(/\S+/g) || []).length;
+
+  return {
+    title,
+    titleLength: title?.length ?? 0,
+    metaDescription,
+    metaDescriptionLength: metaDescription?.length ?? 0,
+    canonical,
+    metaRobots,
+    xRobotsTag: opts.xRobotsTag ?? null,
+    noindex,
+    nofollow,
+    indexable,
+    h1Count,
+    hasViewport,
+    htmlLang,
+    framework,
+    analytics,
+    openGraph,
+    twitter,
+    jsonLdTypes: [...new Set(jsonLdTypes)],
+    imagesTotal,
+    imagesMissingAlt,
+    links: [...allLinks],
+    internalLinks: internal,
+    externalLinkCount,
+    wordCount,
+  };
 }
 
 export async function auditPage(rawUrl: string): Promise<AuditResult> {
@@ -95,126 +228,82 @@ export async function auditPage(rawUrl: string): Promise<AuditResult> {
     return emptyResult(rawUrl, finalUrl, status, findings);
   }
 
-  const analytics = detectAnalytics(html);
-  const $ = cheerio.load(html);
-  const framework = detectFramework(html, $);
+  const sig = analyzeHtml(html, { url: finalUrl, status, xRobotsTag: res.headers.get("x-robots-tag") });
 
   // --- title ---
-  const title = ($("title").first().text() || "").trim() || null;
-  const titleLength = title?.length ?? 0;
-  if (!title) {
+  if (!sig.title) {
     add("warning", "title:missing", "No <title> tag", "The title is the clickable headline in Google results — without it Google invents one.", "Add a unique, descriptive <title> (≈50–60 characters).");
-  } else if (titleLength > 60) {
-    add("info", "title:long", `Title is ${titleLength} characters (Google may truncate)`, "Titles over ~60 characters get cut off in search results.", "Tighten the title to ≈50–60 characters.");
-  } else if (titleLength < 15) {
-    add("info", "title:short", `Title is very short (${titleLength} chars)`, "A too-short title wastes a ranking and click opportunity.", "Expand it to describe the page in ≈50–60 characters.");
+  } else if (sig.titleLength > 60) {
+    add("info", "title:long", `Title is ${sig.titleLength} characters (Google may truncate)`, "Titles over ~60 characters get cut off in search results.", "Tighten the title to ≈50–60 characters.");
+  } else if (sig.titleLength < 15) {
+    add("info", "title:short", `Title is very short (${sig.titleLength} chars)`, "A too-short title wastes a ranking and click opportunity.", "Expand it to describe the page in ≈50–60 characters.");
   }
 
   // --- meta description ---
-  const metaDescription = $('meta[name="description"]').attr("content")?.trim() || null;
-  const metaDescriptionLength = metaDescription?.length ?? 0;
-  if (!metaDescription) {
+  if (!sig.metaDescription) {
     add("warning", "meta:missing", "No meta description", "This is the summary text under your title in Google — without it Google picks a random snippet.", "Add a unique 1–2 sentence meta description (≈150–160 characters).");
-  } else if (metaDescriptionLength > 165) {
-    add("info", "meta:long", `Meta description is ${metaDescriptionLength} chars (may truncate)`, "Descriptions over ~160 characters get cut off.", "Trim to ≈150–160 characters.");
+  } else if (sig.metaDescriptionLength > 165) {
+    add("info", "meta:long", `Meta description is ${sig.metaDescriptionLength} chars (may truncate)`, "Descriptions over ~160 characters get cut off.", "Trim to ≈150–160 characters.");
   }
 
   // --- canonical ---
-  const canonical = $('link[rel="canonical"]').attr("href")?.trim() || null;
-  if (!canonical) {
+  if (!sig.canonical) {
     add("warning", "canonical:missing", "No canonical tag", "Without a canonical, Google may treat slightly different URLs as duplicates and pick the wrong one.", "Add a self-referencing <link rel=\"canonical\"> pointing to this page's preferred URL.");
   }
 
-  // --- robots noindex ---
-  const robotsMeta = ($('meta[name="robots"]').attr("content") || "").toLowerCase();
-  if (robotsMeta.includes("noindex")) {
-    add("critical", "robots:noindex", "This page has a 'noindex' tag", "A noindex instruction tells Google to keep this page out of search entirely.", "Remove the noindex if you want this page to rank.", `meta robots = "${robotsMeta}"`);
+  // --- robots noindex (meta OR X-Robots-Tag header) ---
+  if (sig.noindex) {
+    const src = sig.metaRobots?.includes("noindex") ? `meta robots = "${sig.metaRobots}"` : `X-Robots-Tag = "${sig.xRobotsTag}"`;
+    add("critical", "robots:noindex", "This page has a 'noindex' instruction", "A noindex instruction tells Google to keep this page out of search entirely.", "Remove the noindex if you want this page to rank.", src);
   }
 
   // --- headings ---
-  const h1Count = $("h1").length;
-  if (h1Count === 0) {
+  if (sig.h1Count === 0) {
     add("warning", "h1:missing", "No H1 heading", "The H1 is the main on-page heading that tells users and Google what the page is about.", "Add a single, descriptive <h1>.");
-  } else if (h1Count > 1) {
-    add("info", "h1:multiple", `${h1Count} H1 headings`, "Multiple H1s can dilute the page's main topic signal.", "Prefer a single H1, with H2/H3 for subsections.");
+  } else if (sig.h1Count > 1) {
+    add("info", "h1:multiple", `${sig.h1Count} H1 headings`, "Multiple H1s can dilute the page's main topic signal.", "Prefer a single H1, with H2/H3 for subsections.");
   }
 
   // --- viewport (mobile) ---
-  if ($('meta[name="viewport"]').length === 0) {
+  if (!sig.hasViewport) {
     add("warning", "mobile:viewport", "No mobile viewport tag", "Without it the page won't render well on phones — and Google indexes the mobile version.", 'Add <meta name="viewport" content="width=device-width, initial-scale=1">.');
   }
 
   // --- lang ---
-  if (!$("html").attr("lang")) {
+  if (!sig.htmlLang) {
     add("info", "html:lang", "No language set on <html>", "Helps Google and screen readers know the page's language.", 'Add a lang attribute, e.g. <html lang="en">.');
   }
 
   // --- Open Graph + Twitter ---
-  const og = (k: string) => $(`meta[property="og:${k}"]`).attr("content")?.trim() || null;
-  const openGraph = {
-    title: og("title"),
-    description: og("description"),
-    image: og("image"),
-    url: og("url"),
-    type: og("type"),
-  };
-  const tw = (k: string) => $(`meta[name="twitter:${k}"]`).attr("content")?.trim() || null;
-  const twitter = { card: tw("card"), title: tw("title"), image: tw("image") };
-  if (!openGraph.image && !twitter.image) {
+  if (!sig.openGraph.image && !sig.twitter.image) {
     add("warning", "social:image", "No social preview image (Open Graph)", "When your link is shared on X, LinkedIn, Slack, WhatsApp etc. it shows no image — far fewer clicks.", "Add og:image (and twitter:image), ~1200×630px.");
   }
-  if (!openGraph.title && !openGraph.description) {
+  if (!sig.openGraph.title && !sig.openGraph.description) {
     add("info", "social:tags", "No Open Graph title/description", "Social platforms fall back to guessing your title/description.", "Add og:title and og:description.");
   }
 
   // --- structured data ---
-  const jsonLdTypes: string[] = [];
-  $('script[type="application/ld+json"]').each((_, el) => {
-    try {
-      const data = JSON.parse($(el).contents().text());
-      const arr = Array.isArray(data) ? data : data["@graph"] ?? [data];
-      for (const node of Array.isArray(arr) ? arr : [arr]) {
-        const t = node?.["@type"];
-        if (t) jsonLdTypes.push(...(Array.isArray(t) ? t : [t]));
-      }
-    } catch {
-      /* invalid JSON-LD */
-    }
-  });
-  if (jsonLdTypes.length === 0) {
+  if (sig.jsonLdTypes.length === 0) {
     add("info", "schema:none", "No structured data (schema.org)", "Structured data makes you eligible for rich results and helps AI engines understand and cite you.", "Add JSON-LD for the page type (Article, Product, FAQ, etc.).");
   }
 
   // --- images alt ---
-  const imagesTotal = $("img").length;
-  const imagesMissingAlt = $("img").filter((_, el) => !($(el).attr("alt") || "").trim()).length;
-  if (imagesMissingAlt > 0) {
-    add("info", "img:alt", `${imagesMissingAlt} of ${imagesTotal} images have no alt text`, "Alt text helps Google understand images and is needed for accessibility.", "Add descriptive alt text to meaningful images.");
+  if (sig.imagesMissingAlt > 0) {
+    add("info", "img:alt", `${sig.imagesMissingAlt} of ${sig.imagesTotal} images have no alt text`, "Alt text helps Google understand images and is needed for accessibility.", "Add descriptive alt text to meaningful images.");
   }
 
-  // --- links + word count ---
-  let internalLinks = 0;
-  let externalLinks = 0;
-  const host = safeHost(finalUrl);
-  $("a[href]").each((_, el) => {
-    const href = $(el).attr("href") || "";
-    if (href.startsWith("#") || href.startsWith("mailto:") || href.startsWith("tel:")) return;
-    const h = safeHost(new URL(href, finalUrl).href);
-    if (h && host && h === host) internalLinks++;
-    else if (h) externalLinks++;
-  });
-  if (internalLinks < 3) {
-    add("info", "links:internal", `Only ${internalLinks} internal links`, "Internal links help Google discover and rank your other pages — too few leaves pages orphaned.", "Link to related pages from this one.");
+  // --- internal links ---
+  if (sig.internalLinks.length < 3) {
+    add("info", "links:internal", `Only ${sig.internalLinks.length} internal links`, "Internal links help Google discover and rank your other pages — too few leaves pages orphaned.", "Link to related pages from this one.");
   }
 
-  $("script, style, noscript").remove();
-  const wordCount = ($("body").text().trim().match(/\S+/g) || []).length;
-  if (wordCount < 300) {
-    add("warning", "content:thin", `Thin content (~${wordCount} words)`, "Very short pages are often judged low-value and left unindexed ('Crawled - currently not indexed').", "Expand with genuinely useful, original content.");
+  // --- content depth ---
+  if (sig.wordCount < 300) {
+    add("warning", "content:thin", `Thin content (~${sig.wordCount} words)`, "Very short pages are often judged low-value and left unindexed ('Crawled - currently not indexed').", "Expand with genuinely useful, original content.");
   }
 
   // --- analytics tag ---
-  if (!analytics.ga4 && !analytics.gtm && !analytics.universal) {
+  if (!sig.analytics.ga4 && !sig.analytics.gtm && !sig.analytics.universal) {
     add("info", "analytics:missing", "No Google Analytics tag found", "This page isn't being measured — you can't see its traffic or behaviour in Analytics.", "Add the GA4 tag (gtag.js) so this page is tracked.");
   }
 
@@ -232,23 +321,25 @@ export async function auditPage(rawUrl: string): Promise<AuditResult> {
     score,
     grade,
     summary: {
-      title,
-      titleLength,
-      metaDescription,
-      metaDescriptionLength,
-      canonical,
-      h1Count,
-      wordCount,
-      framework,
-      analytics,
-      jsonLdTypes: [...new Set(jsonLdTypes)],
-      imagesMissingAlt,
-      imagesTotal,
-      internalLinks,
-      externalLinks,
+      title: sig.title,
+      titleLength: sig.titleLength,
+      metaDescription: sig.metaDescription,
+      metaDescriptionLength: sig.metaDescriptionLength,
+      canonical: sig.canonical,
+      noindex: sig.noindex,
+      indexable: sig.indexable,
+      h1Count: sig.h1Count,
+      wordCount: sig.wordCount,
+      framework: sig.framework,
+      analytics: sig.analytics,
+      jsonLdTypes: sig.jsonLdTypes,
+      imagesMissingAlt: sig.imagesMissingAlt,
+      imagesTotal: sig.imagesTotal,
+      internalLinks: sig.internalLinks.length,
+      externalLinks: sig.externalLinkCount,
     },
-    openGraph,
-    twitter,
+    openGraph: sig.openGraph,
+    twitter: sig.twitter,
     findings,
   };
 }
@@ -275,6 +366,8 @@ function emptyResult(url: string, finalUrl: string, status: number, findings: Fi
       metaDescription: null,
       metaDescriptionLength: 0,
       canonical: null,
+      noindex: false,
+      indexable: false,
       h1Count: 0,
       wordCount: 0,
       framework: null,
