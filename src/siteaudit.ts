@@ -65,11 +65,18 @@ export function siteAudit(siteUrl: string): SiteAudit {
   }
 
   // --- internal-link graph (in-degree) ---
+  // A link to a URL that redirects should credit its target, else the target
+  // looks orphaned. Build a redirect map and resolve link keys through it.
+  const redirectMap = new Map<string, string>();
+  for (const r of records) {
+    if (r.redirectChain.length > 0) redirectMap.set(normKey(r.url), normKey(r.finalUrl));
+  }
   const inDegree = new Map<string, number>();
   let edges = 0;
   for (const r of records) {
     for (const link of r.internalLinks) {
-      const k = normKey(link, r.finalUrl);
+      const raw = normKey(link, r.finalUrl);
+      const k = redirectMap.get(raw) ?? raw;
       inDegree.set(k, (inDegree.get(k) ?? 0) + 1);
       edges++;
     }

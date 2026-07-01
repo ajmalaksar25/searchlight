@@ -1,7 +1,7 @@
 import { readSiteJson, writeSiteJson } from "./cache.js";
 import { collectCandidates } from "./coverage.js";
 import { analyzeHtml } from "./audit.js";
-import { fetchText, extractLocs } from "./util/web.js";
+import { fetchText, extractLocs, robotsBlocks } from "./util/web.js";
 
 /**
  * Direct-fetch recursive site crawler. Unlike coverage.ts (which inspects URLs
@@ -18,7 +18,7 @@ import { fetchText, extractLocs } from "./util/web.js";
  */
 
 const UA = "searchlight site crawler";
-const CRAWL_CAP = 5000; // hard ceiling on total pages per site
+const CRAWL_CAP = 5000; // ceiling on total pages per site (may overshoot by <CONCURRENCY)
 const DEFAULT_MAX_PAGES = 150; // pages fetched per run (resumable)
 const CONCURRENCY = 6;
 const MAX_REDIRECT_HOPS = 8;
@@ -57,8 +57,8 @@ interface CrawlState {
   lastRunAt?: string;
   done: boolean;
   frontier: { url: string; depth: number }[];
-  /** Disallow rules (User-agent: *) keyed by origin host. */
-  robots: Record<string, string[]>;
+  /** robots.txt rules (User-agent: *) keyed by origin host. */
+  robots: RobotsMap;
   origins: string[];
 }
 
@@ -95,12 +95,23 @@ function boundaryFor(siteUrl: string): (url: string) => boolean {
     };
   }
   let host = "";
+  let prefix = "/";
   try {
-    host = new URL(siteUrl).host.toLowerCase();
+    const u = new URL(siteUrl);
+    host = u.host.toLowerCase();
+    prefix = u.pathname; // path-scoped URL-prefix props stay within their path
   } catch {
     return () => false;
   }
-  return (url) => hostOf(url) === host;
+  return (url) => {
+    if (hostOf(url) !== host) return false;
+    if (prefix === "/") return true;
+    try {
+      return new URL(url).pathname.startsWith(prefix);
+    } catch {
+      return false;
+    }
+  };
 }
 
 function originsFor(siteUrl: string): string[] {
@@ -119,12 +130,14 @@ function originsFor(siteUrl: string): string[] {
 
 export interface Robots {
   disallow: string[];
+  allow: string[];
   sitemaps: string[];
 }
 
-/** Minimal robots.txt parser: Disallow paths + Sitemap: directives for the `*` group. */
+/** Minimal robots.txt parser: Disallow/Allow paths + Sitemap: directives for the `*` group. */
 export function parseRobots(text: string): Robots {
   const disallow: string[] = [];
+  const allow: string[] = [];
   const sitemaps: string[] = [];
   let active = false;
   for (const raw of text.split(/\r?\n/)) {
@@ -137,13 +150,17 @@ export function parseRobots(text: string): Robots {
     if (field === "user-agent") active = val === "*";
     else if (field === "sitemap") sitemaps.push(val);
     else if (field === "disallow" && active && val) disallow.push(val);
+    else if (field === "allow" && active && val) allow.push(val);
   }
-  return { disallow, sitemaps };
+  return { disallow, allow, sitemaps };
 }
 
-function isDisallowed(url: string, robots: Record<string, string[]>): boolean {
+type RobotsMap = Record<string, { disallow: string[]; allow: string[] }>;
+
+function isDisallowed(url: string, robots: RobotsMap): boolean {
   const h = hostOf(url);
-  if (!h || !robots[h]?.length) return false;
+  const rules = h ? robots[h] : undefined;
+  if (!rules?.disallow.length) return false;
   let path: string;
   try {
     const u = new URL(url);
@@ -151,8 +168,7 @@ function isDisallowed(url: string, robots: Record<string, string[]>): boolean {
   } catch {
     return false;
   }
-  // simple prefix match (wildcards not expanded — conservative on the disallow side)
-  return robots[h].some((rule) => path.startsWith(rule.replace(/\*.*$/, "")));
+  return robotsBlocks(path, rules.disallow, rules.allow);
 }
 
 // ---------- fetch helpers ----------
@@ -220,7 +236,8 @@ async function fetchFollowing(url: string): Promise<FetchResult> {
       chain.push({ url: current, status, location });
       const next = location ? normalize(location, current) : null;
       if (!next) return { status, finalUrl: current, chain, loop: false, contentType, xRobotsTag, body: "" };
-      if (chain.some((h) => h.url === next) || chain.length > MAX_REDIRECT_HOPS) {
+      if (chain.some((h) => h.url === next)) {
+        // genuine cycle (self-redirect or A->B->A)
         return { status, finalUrl: next, chain, loop: true, contentType, xRobotsTag, body: "" };
       }
       current = next;
@@ -230,7 +247,8 @@ async function fetchFollowing(url: string): Promise<FetchResult> {
     const body = isHtml ? await res.text().catch(() => "") : "";
     return { status, finalUrl: current, chain, loop: false, contentType, xRobotsTag, body };
   }
-  return { status: 0, finalUrl: current, chain, loop: true, contentType: null, xRobotsTag: null, body: "" };
+  // exhausted MAX_REDIRECT_HOPS without a cycle: a long unresolved chain, not a loop
+  return { status: 0, finalUrl: current, chain, loop: false, contentType: null, xRobotsTag: null, body: "" };
 }
 
 // ---------- per-URL processing ----------
@@ -241,10 +259,14 @@ function analyze(
   fr: FetchResult,
   inSite: (u: string) => boolean
 ): CrawlRecord {
+  const redirected = fr.chain.length > 0;
   const xr = (fr.xRobotsTag || "").toLowerCase();
   const rec: CrawlRecord = {
     url: requestUrl,
-    status: fr.status,
+    // A redirect record reflects that THIS url redirects (its hop status), not the
+    // final page's 200 — the final page's content is recorded under finalUrl, which
+    // is enqueued and crawled separately. Prevents double-counting the target.
+    status: redirected ? fr.chain[0].status : fr.status,
     finalUrl: fr.finalUrl,
     redirectChain: fr.chain,
     redirectLoop: fr.loop,
@@ -263,9 +285,9 @@ function analyze(
     error: fr.error,
   };
 
-  if (fr.status === 200 && fr.body) {
-    // Same parser as auditPage. The crawler already skipped robots-disallowed
-    // URLs before fetching, so robotsDisallowed is false for anything analyzed.
+  // Only parse content for a direct (non-redirected) 200. The crawler already
+  // skipped robots-disallowed URLs before fetching, so robotsDisallowed is false.
+  if (!redirected && fr.status === 200 && fr.body) {
     const sig = analyzeHtml(fr.body, { url: fr.finalUrl, status: fr.status, xRobotsTag: fr.xRobotsTag });
     rec.title = sig.title;
     rec.canonical = sig.canonical;
@@ -319,18 +341,19 @@ export async function crawlSite(siteUrl: string, opts: CrawlOptions = {}): Promi
   if (!state || !state.seededAt) {
     // --- seed: direct (homepage + sitemap + robots Sitemap:) ∪ GSC candidates ---
     const seeds = new Set<string>();
-    const robots: Record<string, string[]> = {};
+    const robots: RobotsMap = {};
     const origins = originsFor(siteUrl);
+    if (!siteUrl.startsWith("sc-domain:")) seeds.add(siteUrl); // path-scoped prefix root
     for (const o of origins) {
       seeds.add(o + "/");
       const host = hostOf(o) ?? o;
       try {
         const txt = await fetchText(o + "/robots.txt", UA);
         const pr = parseRobots(txt);
-        robots[host] = pr.disallow;
+        robots[host] = { disallow: pr.disallow, allow: pr.allow };
         for (const sm of pr.sitemaps) await addSitemap(sm, seeds, inSite);
       } catch {
-        robots[host] = [];
+        robots[host] = { disallow: [], allow: [] };
       }
       await addSitemap(o + "/sitemap.xml", seeds, inSite);
     }
@@ -349,8 +372,9 @@ export async function crawlSite(siteUrl: string, opts: CrawlOptions = {}): Promi
   let crawledThisRun = 0;
   let skippedByRobots = 0;
   let errors = 0;
+  let total = Object.keys(cache).length; // running count (avoids O(n) recompute per batch)
 
-  while (state.frontier.length > 0 && crawledThisRun < maxPages && Object.keys(cache).length < CRAWL_CAP) {
+  while (state.frontier.length > 0 && crawledThisRun < maxPages && total < CRAWL_CAP) {
     const batch: { url: string; depth: number }[] = [];
     while (state.frontier.length > 0 && batch.length < CONCURRENCY && crawledThisRun + batch.length < maxPages) {
       const item = state.frontier.shift()!;
@@ -369,6 +393,7 @@ export async function crawlSite(siteUrl: string, opts: CrawlOptions = {}): Promi
       batch.map((item) => fetchFollowing(item.url).then((fr) => analyze(item.url, item.depth, fr, inSite)))
     );
     for (const rec of results) {
+      if (!cache[rec.url]) total++;
       cache[rec.url] = rec;
       crawledThisRun++;
       if (rec.status === 0) errors++;
@@ -377,7 +402,7 @@ export async function crawlSite(siteUrl: string, opts: CrawlOptions = {}): Promi
       const next = rec.redirectChain.length > 0 && inSite(rec.finalUrl) ? [rec.finalUrl, ...discovered] : discovered;
       for (const link of next) {
         if (cache[link] || queued.has(link)) continue;
-        if (Object.keys(cache).length + queued.size >= CRAWL_CAP) break;
+        if (total + queued.size >= CRAWL_CAP) break;
         state.frontier.push({ url: link, depth: rec.depth + 1 });
         queued.add(link);
       }

@@ -1,7 +1,7 @@
 import { gscClient, runSearchAnalytics, daysAgo, rowsToObjects, type AnalyticsRow } from "./gsc.js";
 import { loadCoverage, bucketCoverage } from "./coverage.js";
 import { loadCrawl, parseRobots } from "./crawl.js";
-import { extractLocs, normKey } from "./util/web.js";
+import { extractLocs, normKey, robotsBlocks } from "./util/web.js";
 import { pagespeedApiKey } from "./keys.js";
 
 /**
@@ -187,14 +187,17 @@ export async function diagnoseSite(siteUrl: string): Promise<Diagnosis> {
   let sitemapOk = false;
   let sitemapRedirects = false;
   const sitemapLocs: string[] = [];
-  const robotsDisallow: Record<string, string[]> = {};
+  const robotsRules: Record<string, { disallow: string[]; allow: string[] }> = {};
   for (const host of hosts) {
     const sm = await probe(`https://${host}/sitemap.xml`);
     if (sm.status === 200 && (sm.locCount ?? 0) > 0) sitemapOk = true;
     else if (sm.status >= 300 && sm.status < 400) sitemapRedirects = true;
     if (sm.status === 200 && sm.body) sitemapLocs.push(...extractLocs(sm.body));
     const rb = await probe(`https://${host}/robots.txt`);
-    if (rb.status === 200 && rb.body) robotsDisallow[host] = parseRobots(rb.body).disallow;
+    if (rb.status === 200 && rb.body) {
+      const pr = parseRobots(rb.body);
+      robotsRules[host] = { disallow: pr.disallow, allow: pr.allow };
+    }
     if ([400, 401, 403].includes(rb.status) || rb.status >= 500) {
       findings.push({
         id: `robots:${host}`,
@@ -256,8 +259,8 @@ export async function diagnoseSite(siteUrl: string): Promise<Diagnosis> {
       } catch {
         return false;
       }
-      const rules = robotsDisallow[host];
-      return !!rules?.some((rule) => rule && path.startsWith(rule.replace(/\*.*$/, "")));
+      const rules = robotsRules[host];
+      return !!rules && robotsBlocks(path, rules.disallow, rules.allow);
     };
 
     const noidxInSitemap = uniqSitemap.filter((u) => byKey.get(normKey(u))?.noindex);

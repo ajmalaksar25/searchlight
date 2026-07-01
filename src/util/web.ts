@@ -30,6 +30,45 @@ export function extractLocs(xml: string): string[] {
 }
 
 /**
+ * Match a URL path against one robots.txt rule value, honoring `*` (any run) and
+ * a trailing `$` (end anchor). Returns the rule's specificity (its length minus
+ * wildcards) on a match, or -1 on no match. Rules are prefix-anchored unless they
+ * start with `*`. This replaces the naive `startsWith` that treated `/*.pdf` as
+ * `/` and blocked entire sites.
+ */
+export function robotsMatchLen(path: string, rule: string): number {
+  if (!rule) return -1;
+  const anchored = rule.endsWith("$");
+  const core = anchored ? rule.slice(0, -1) : rule;
+  const parts = core.split("*");
+  let idx = 0;
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i];
+    if (part === "") continue; // leading/trailing/double * — matches any run
+    if (i === 0) {
+      if (!path.startsWith(part)) return -1; // no leading * => anchored at start
+      idx = part.length;
+    } else {
+      const f = path.indexOf(part, idx);
+      if (f < 0) return -1;
+      idx = f + part.length;
+    }
+  }
+  if (anchored && idx !== path.length) return -1;
+  return core.replace(/\*/g, "").length;
+}
+
+/** True if robots.txt blocks `path`. Longest-match wins; Allow wins ties (Google's rule). */
+export function robotsBlocks(path: string, disallow: string[], allow: string[] = []): boolean {
+  let d = -1;
+  let a = -1;
+  for (const r of disallow) d = Math.max(d, robotsMatchLen(path, r));
+  for (const r of allow) a = Math.max(a, robotsMatchLen(path, r));
+  if (d < 0) return false; // nothing disallows it
+  return a < d; // blocked only if no equal-or-more-specific Allow
+}
+
+/**
  * Canonical comparison/graph key for a URL: lowercased host, no fragment, and no
  * trailing slash (except root). Lets sitemap URLs, canonicals, and crawl records
  * be matched despite trailing-slash/case differences. Query is preserved.
