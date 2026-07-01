@@ -12,6 +12,7 @@ import {
 import { gscClient } from "./gsc.js";
 import { refreshCoverage } from "./coverage.js";
 import { crawlSite } from "./crawl.js";
+import { siteAudit } from "./siteaudit.js";
 import { installSkill } from "./skill-install.js";
 
 const USAGE = `searchlight - autonomous technical SEO + analytics (MCP server)
@@ -31,6 +32,8 @@ Usage:
                              crawl --all [--max N]
   searchlight crawl-site       Crawl the live site directly (no quota, schedulable):
                              crawl-site <alias|siteUrl> [--max N] [--reset]
+  searchlight audit-site       Site-wide technical SEO report from the crawl:
+                             audit-site <alias|siteUrl>
   searchlight serve            Start the MCP server over stdio (default)
   searchlight skill install    Install the /searchlight skill into your AI client (--here for this project)
 
@@ -207,6 +210,19 @@ async function crawlSiteCmd(args: string[]): Promise<void> {
   }
 }
 
+function auditSiteCmd(args: string[]): void {
+  const target = args.find((a) => !a.startsWith("--"));
+  if (!target) throw new Error("Usage: searchlight audit-site <alias|siteUrl>  (run crawl-site first)");
+  const a = siteAudit(resolveAlias(target));
+  console.error(`\n${a.siteUrl} — site audit (${a.grade}, ${a.score}/100)`);
+  console.error(`  ${a.headline}`);
+  console.error(`  ${a.crawledPages} pages | ${a.metrics.indexable} indexable | ${a.metrics.broken} broken | ${a.metrics.orphans} orphaned`);
+  if (a.findings.length) {
+    console.error("  Findings (worst first):");
+    for (const f of a.findings) console.error(`   [${f.severity}] ${f.title}`);
+  }
+}
+
 /**
  * Parse global flags (an easier alternative to env vars — usable in an MCP
  * client's args array, e.g. ["serve", "--setup"]) and apply them by setting the
@@ -259,6 +275,9 @@ async function main(): Promise<void> {
       break;
     case "crawl-site":
       await crawlSiteCmd(argv.slice(1));
+      break;
+    case "audit-site":
+      auditSiteCmd(argv.slice(1));
       break;
     case "skill":
       manageSkill(argv.slice(1));

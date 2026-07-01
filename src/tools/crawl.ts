@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { ok, fail } from "../util/result.js";
 import { crawlSite } from "../crawl.js";
+import { siteAudit } from "../siteaudit.js";
 import { siteUrlOptional, type ToolModule } from "./shared.js";
 
 /**
@@ -41,6 +42,27 @@ export const register: ToolModule = (server, ctx) => {
         const { siteUrl: resolved } = ctx.resolveSite(siteUrl);
         const progress = await crawlSite(resolved, { maxPages, reset });
         return ok(progress);
+      } catch (e) {
+        return fail(e);
+      }
+    }
+  );
+
+  server.registerTool(
+    "site_audit",
+    {
+      title: "Site-wide technical SEO audit (from the crawl)",
+      description:
+        "Turn the crawl (run crawl_site first) into a triaged, site-wide report: status inventory (4xx/5xx), " +
+        "redirect chains/loops and 301-vs-302 guidance, noindex pages, canonical health (missing, host/protocol " +
+        "split, trailing-slash), and the internal-link graph with ORPHAN detection. Findings are ranked by " +
+        "severity then affected-page count ('fix these first'). Read-only and instant — reads the local crawl cache.",
+      inputSchema: { siteUrl: siteUrlOptional },
+    },
+    async ({ siteUrl }) => {
+      try {
+        const { siteUrl: resolved } = ctx.resolveSite(siteUrl);
+        return ok(siteAudit(resolved));
       } catch (e) {
         return fail(e);
       }
