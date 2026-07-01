@@ -192,6 +192,46 @@ export function siteAudit(siteUrl: string): SiteAudit {
     add("info", "canonical:slash", slashMismatch, `${slashMismatch.length} canonical${slashMismatch.length > 1 ? "s differ" : " differs"} from the live URL only by a trailing slash`, "A canonical that doesn't exactly match the URL Google crawled adds a small ambiguity Google has to resolve.", "Make the canonical string exactly match the served URL (with or without the trailing slash, consistently).");
   }
 
+  // --- duplicate URL variants (same page at slash/case variants) ---
+  const byNorm = new Map<string, CrawlRecord[]>();
+  for (const r of html200) {
+    const k = normKey(r.url);
+    (byNorm.get(k) ?? byNorm.set(k, []).get(k)!).push(r);
+  }
+  const variantDups = [...byNorm.values()].filter((a) => a.length >= 2).flat();
+  if (variantDups.length) {
+    add("warning", "dup:url-variants", variantDups, `${variantDups.length} URLs are duplicate variants of another page`, "The same page is reachable at more than one URL (trailing-slash or case variants). Google splits ranking signals across them unless one canonical wins.", "Pick one URL form, 301 the variants to it, and make canonicals agree.");
+  }
+
+  // --- URL-parameter duplication ---
+  const byPath = new Map<string, Set<string>>();
+  for (const r of html200) {
+    try {
+      const u = new URL(r.url);
+      if (!u.search) continue;
+      const p = u.origin + u.pathname;
+      (byPath.get(p) ?? byPath.set(p, new Set()).get(p)!).add(r.url);
+    } catch {
+      /* skip */
+    }
+  }
+  const paramPaths = [...byPath.entries()].filter(([, s]) => s.size >= 2);
+  if (paramPaths.length) {
+    add("info", "dup:url-params", paramPaths.map(([p]) => p), `${paramPaths.length} path${paramPaths.length > 1 ? "s have" : " has"} multiple URL-parameter variants`, "The same page crawled under different query strings can create near-duplicate URLs — wasting crawl budget and splitting signals.", "Canonicalize parameterized URLs to the clean version, or handle parameters consistently (consistent order, drop tracking params).");
+  }
+
+  // --- duplicate titles ---
+  const byTitle = new Map<string, CrawlRecord[]>();
+  for (const r of html200) {
+    const t = (r.title || "").trim().toLowerCase();
+    if (!t) continue;
+    (byTitle.get(t) ?? byTitle.set(t, []).get(t)!).push(r);
+  }
+  const dupTitlePages = [...byTitle.values()].filter((a) => a.length >= 2).flat();
+  if (dupTitlePages.length) {
+    add("info", "dup:titles", dupTitlePages, `${dupTitlePages.length} pages share a <title> with another page`, "Identical titles suggest near-duplicate or thin pages, and give Google no way to tell them apart in results.", "Give each page a unique, descriptive title reflecting its specific content.");
+  }
+
   // --- orphans ---
   if (orphans.length) {
     add("warning", "links:orphan", orphans, `${orphans.length} page${orphans.length > 1 ? "s are" : " is"} orphaned (no internal links point to them)`, "Pages nothing links to are hard for Google to discover and rank — they were only found here via the sitemap. Internal links pass authority and aid crawling.", "Add internal links to these pages from related, well-linked pages.");
