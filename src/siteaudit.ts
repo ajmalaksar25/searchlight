@@ -68,7 +68,9 @@ export function siteAudit(siteUrl: string): SiteAudit {
   // A link to a URL that redirects should credit its target, else the target
   // looks orphaned. Build a redirect map and resolve link keys through it.
   const redirectMap = new Map<string, string>();
+  const byKey = new Map<string, CrawlRecord>();
   for (const r of records) {
+    byKey.set(normKey(r.url), r);
     if (r.redirectChain.length > 0) redirectMap.set(normKey(r.url), normKey(r.finalUrl));
   }
   const inDegree = new Map<string, number>();
@@ -138,6 +140,25 @@ export function siteAudit(siteUrl: string): SiteAudit {
   const noidx = records.filter((r) => r.status === 200 && r.noindex);
   if (noidx.length) {
     add("warning", "index:noindex", noidx, `${noidx.length} crawlable page${noidx.length > 1 ? "s have" : " has"} a noindex instruction`, "These pages load fine but tell Google to keep them out of search (via meta robots or X-Robots-Tag). Fine if intentional, a silent traffic leak if not.", "Confirm each of these should be hidden; remove the noindex from any that should rank.");
+  }
+
+  // --- structured data validity ---
+  const invalidSchema = records.filter((r) => r.schemaInvalid > 0);
+  if (invalidSchema.length) {
+    add("warning", "schema:invalid", invalidSchema, `${invalidSchema.length} page${invalidSchema.length > 1 ? "s have" : " has"} invalid structured data`, "Google silently ignores JSON-LD it can't parse, so these pages get zero rich-result benefit and you never see an error.", "Fix the JSON syntax in the structured-data scripts (validate with Google's Rich Results Test).");
+  }
+
+  // --- hreflang reciprocity (only when hreflang is used) ---
+  const nonReciprocal = records.filter((r) => {
+    if (r.status !== 200 || r.hreflang.length === 0) return false;
+    return r.hreflang.some((e) => {
+      const target = byKey.get(normKey(e.href));
+      if (!target || normKey(target.url) === normKey(r.url)) return false; // off-site/self: skip
+      return !target.hreflang.some((back) => normKey(back.href) === normKey(r.url));
+    });
+  });
+  if (nonReciprocal.length) {
+    add("warning", "hreflang:non-reciprocal", nonReciprocal, `${nonReciprocal.length} page${nonReciprocal.length > 1 ? "s have" : " has"} a non-reciprocal hreflang link`, "hreflang must be mutual: if page A points to B as a language alternate, B must point back to A. One-way hreflang is ignored by Google, so your international pages don't get connected.", "Add the return hreflang link on each target page (every alternate should list all the others, including itself).");
   }
 
   // --- canonical health ---

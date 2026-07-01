@@ -58,6 +58,23 @@ function detectFramework(html: string, $: cheerio.CheerioAPI): string | null {
   return null;
 }
 
+// Minimal required-property checks for the common rich-result types. Missing any
+// of these means the type won't qualify for its rich result in Google.
+const SCHEMA_REQUIRED: Record<string, string[]> = {
+  Article: ["headline"],
+  NewsArticle: ["headline"],
+  BlogPosting: ["headline"],
+  Product: ["name"],
+  Recipe: ["name", "image"],
+  Event: ["name", "startDate"],
+  JobPosting: ["title", "datePosted"],
+  FAQPage: ["mainEntity"],
+  BreadcrumbList: ["itemListElement"],
+  Organization: ["name"],
+  LocalBusiness: ["name"],
+  VideoObject: ["name", "thumbnailUrl"],
+};
+
 /** Parsed on-page signals shared by auditPage and the site crawler. */
 export interface PageSignals {
   title: string | null;
@@ -78,6 +95,9 @@ export interface PageSignals {
   openGraph: Record<string, string | null>;
   twitter: Record<string, string | null>;
   jsonLdTypes: string[];
+  schemaInvalid: number; // count of JSON-LD blocks that failed to parse
+  schemaIssues: string[]; // e.g. 'Product is missing "name"'
+  hreflang: { lang: string; href: string }[];
   imagesTotal: number;
   imagesMissingAlt: number;
   links: string[]; // ALL unique, fragment-stripped, absolute http(s) links (for the crawler's own boundary)
@@ -118,16 +138,39 @@ export function analyzeHtml(
   const twitter = { card: tw("card"), title: tw("title"), image: tw("image") };
 
   const jsonLdTypes: string[] = [];
+  const schemaIssues: string[] = [];
+  let schemaInvalid = 0;
   $('script[type="application/ld+json"]').each((_, el) => {
+    let data: unknown;
     try {
-      const data = JSON.parse($(el).contents().text());
-      const arr = Array.isArray(data) ? data : data["@graph"] ?? [data];
-      for (const node of Array.isArray(arr) ? arr : [arr]) {
-        const t = node?.["@type"];
-        if (t) jsonLdTypes.push(...(Array.isArray(t) ? t : [t]));
-      }
+      data = JSON.parse($(el).contents().text());
     } catch {
-      /* invalid JSON-LD */
+      schemaInvalid++; // broken JSON-LD is silently dropped by Google
+      return;
+    }
+    const arr = Array.isArray(data) ? data : (data as Record<string, unknown>)["@graph"] ?? [data];
+    for (const node of (Array.isArray(arr) ? arr : [arr]) as Record<string, unknown>[]) {
+      if (!node || typeof node !== "object") continue;
+      const t = node["@type"];
+      const types = Array.isArray(t) ? (t as string[]) : t ? [t as string] : [];
+      jsonLdTypes.push(...types);
+      for (const ty of types) {
+        for (const prop of SCHEMA_REQUIRED[ty] ?? []) {
+          if (!(prop in node)) schemaIssues.push(`${ty} is missing "${prop}"`);
+        }
+      }
+    }
+  });
+
+  const hreflang: { lang: string; href: string }[] = [];
+  $('link[rel="alternate"][hreflang]').each((_, el) => {
+    const lang = $(el).attr("hreflang");
+    const href = $(el).attr("href");
+    if (!lang || !href) return;
+    try {
+      hreflang.push({ lang, href: new URL(href, opts.url).href });
+    } catch {
+      /* unparseable hreflang href */
     }
   });
 
@@ -176,6 +219,9 @@ export function analyzeHtml(
     openGraph,
     twitter,
     jsonLdTypes: [...new Set(jsonLdTypes)],
+    schemaInvalid,
+    schemaIssues: [...new Set(schemaIssues)],
+    hreflang,
     imagesTotal,
     imagesMissingAlt,
     links: [...allLinks],
@@ -283,8 +329,14 @@ export async function auditPage(rawUrl: string): Promise<AuditResult> {
   }
 
   // --- structured data ---
-  if (sig.jsonLdTypes.length === 0) {
+  if (sig.jsonLdTypes.length === 0 && sig.schemaInvalid === 0) {
     add("info", "schema:none", "No structured data (schema.org)", "Structured data makes you eligible for rich results and helps AI engines understand and cite you.", "Add JSON-LD for the page type (Article, Product, FAQ, etc.).");
+  }
+  if (sig.schemaInvalid > 0) {
+    add("warning", "schema:invalid", `${sig.schemaInvalid} structured-data block${sig.schemaInvalid > 1 ? "s are" : " is"} invalid JSON`, "Google silently ignores structured data it can't parse, so you get zero rich-result benefit from it — and don't find out.", "Fix the JSON syntax in your JSON-LD <script> tags (validate with Google's Rich Results Test).");
+  }
+  if (sig.schemaIssues.length > 0) {
+    add("info", "schema:incomplete", `Structured data missing required propert${sig.schemaIssues.length > 1 ? "ies" : "y"}`, "Some schema.org types are missing properties Google requires, so they won't qualify for their rich result.", `Add: ${sig.schemaIssues.slice(0, 4).join("; ")}.`);
   }
 
   // --- images alt ---

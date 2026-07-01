@@ -43,6 +43,8 @@ export interface CrawlRecord {
   noindex: boolean; // meta robots OR X-Robots-Tag
   nofollow: boolean;
   indexable: boolean; // 200 + not noindex + not robots-disallowed
+  hreflang: { lang: string; href: string }[];
+  schemaInvalid: number; // count of unparseable JSON-LD blocks
   internalLinks: string[]; // normalized, same-site (crawl boundary), deduped
   externalLinkCount: number;
   depth: number;
@@ -278,6 +280,8 @@ function analyze(
     noindex: xr.includes("noindex"), // header applies even to non-HTML / non-200
     nofollow: xr.includes("nofollow"),
     indexable: false,
+    hreflang: [],
+    schemaInvalid: 0,
     internalLinks: [],
     externalLinkCount: 0,
     depth,
@@ -295,6 +299,8 @@ function analyze(
     rec.noindex = sig.noindex;
     rec.nofollow = sig.nofollow;
     rec.indexable = sig.indexable;
+    rec.hreflang = sig.hreflang;
+    rec.schemaInvalid = sig.schemaInvalid;
     // Re-filter ALL links through the crawl boundary (broader than same-host for domain props).
     rec.internalLinks = sig.links.filter(inSite);
     rec.externalLinkCount = sig.links.length - rec.internalLinks.length;
