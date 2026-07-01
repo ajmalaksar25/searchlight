@@ -292,6 +292,22 @@ export async function diagnoseSite(siteUrl: string): Promise<Diagnosis> {
       });
     }
 
+    const sitemapNon200 = uniqSitemap.filter((u) => {
+      const r = byKey.get(normKey(u));
+      return !!r && r.status >= 300;
+    });
+    if (sitemapNon200.length) {
+      findings.push({
+        id: "reconcile:sitemap-non200",
+        severity: "warning",
+        title: `${sitemapNon200.length} sitemap URL${sitemapNon200.length > 1 ? "s" : ""} redirect or return an error`,
+        why: "A sitemap should list only final, canonical URLs that return 200. Entries that redirect or return 4xx/5xx waste crawl budget and send Google mixed signals about which URL is the real one.",
+        whatToDo: "Replace each with its final 200 destination, or remove it from the sitemap.",
+        count: sitemapNon200.length,
+        sampleUrls: sitemapNon200.slice(0, 10),
+      });
+    }
+
     const canonBad = crawlRecs.filter((r) => {
       if (!r.canonical) return false;
       let target;
