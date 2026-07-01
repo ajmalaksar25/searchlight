@@ -18,13 +18,23 @@ export const register: ToolModule = (server, ctx) => {
       description:
         "The reconstructed 'Page indexing' report from the local cache: how many URLs are indexed vs not, " +
         "broken down into buckets (e.g. 'Crawled - currently not indexed', 'Discovered', 'Page with redirect', " +
-        "'Blocked by robots.txt') with sample URLs. Read-only and instant. Run refresh_coverage first to populate it.",
-      inputSchema: { siteUrl: siteUrlOptional },
+        "'Blocked by robots.txt') with sample URLs. Read-only and instant. Run refresh_coverage first to populate it. " +
+        "Pass `state` to drill into one bucket and list its actual URLs (paginated).",
+      inputSchema: {
+        siteUrl: siteUrlOptional,
+        state: z
+          .string()
+          .optional()
+          .describe("Drill into one bucket: the exact coverageState (as shown in the buckets), e.g. 'Crawled - currently not indexed'."),
+        limit: z.number().int().min(1).max(500).optional().describe("For state drill-down: rows to return. Default 50."),
+        startRow: z.number().int().min(0).optional().describe("For state drill-down pagination. Default 0."),
+      },
     },
-    async ({ siteUrl }) => {
+    async ({ siteUrl, state, limit, startRow }) => {
       try {
         const { siteUrl: resolved } = ctx.resolveSite(siteUrl);
         const cache = loadCoverage(resolved);
+        if (state) return ok(pagesInBucket(cache, state, limit ?? 50, startRow ?? 0));
         const candidates = readSiteJson<string[]>(resolved, "candidates.json", []);
         const meta = readSiteJson<Record<string, string>>(resolved, "meta.json", {});
         const { totals, buckets } = bucketCoverage(cache);
@@ -69,7 +79,8 @@ export const register: ToolModule = (server, ctx) => {
       description:
         "Advance the coverage crawl: collect candidate URLs (sitemaps + analytics) and inspect the ones not yet " +
         "cached, up to maxUrls and within the 2,000/day per-property URL Inspection quota. Resumable — call again " +
-        "to continue where it left off. May take ~10-30s.",
+        "to continue where it left off. May take ~10-30s. Pass allSites:true to advance EVERY accessible property " +
+        "in one call (whole-portfolio refresh).",
       inputSchema: {
         siteUrl: siteUrlOptional,
         maxUrls: z
@@ -78,79 +89,31 @@ export const register: ToolModule = (server, ctx) => {
           .min(1)
           .max(2000)
           .optional()
-          .describe("Max URLs to inspect this run. Default 100 (bounded by remaining quota)."),
-      },
-    },
-    async ({ siteUrl, maxUrls }) => {
-      try {
-        const { siteUrl: resolved } = ctx.resolveSite(siteUrl);
-        const progress = await refreshCoverage(resolved, maxUrls ?? 100);
-        return ok(progress);
-      } catch (e) {
-        return fail(e);
-      }
-    }
-  );
-
-  server.registerTool(
-    "get_pages_in_bucket",
-    {
-      title: "Get pages in a coverage bucket",
-      description:
-        "Drill into one coverage bucket — list the actual URLs (with index status, canonical, last crawl) for a " +
-        "given coverageState, e.g. 'Crawled - currently not indexed'. Paginated.",
-      inputSchema: {
-        siteUrl: siteUrlOptional,
-        state: z.string().describe("The exact coverageState bucket, as shown in coverage_report."),
-        limit: z.number().int().min(1).max(500).optional().describe("Rows to return. Default 50."),
-        startRow: z.number().int().min(0).optional().describe("For pagination. Default 0."),
-      },
-    },
-    async ({ siteUrl, state, limit, startRow }) => {
-      try {
-        const { siteUrl: resolved } = ctx.resolveSite(siteUrl);
-        const cache = loadCoverage(resolved);
-        return ok(pagesInBucket(cache, state, limit ?? 50, startRow ?? 0));
-      } catch (e) {
-        return fail(e);
-      }
-    }
-  );
-
-  server.registerTool(
-    "refresh_all_coverage",
-    {
-      title: "Refresh coverage for all sites",
-      description:
-        "Advance the coverage crawl for EVERY accessible property in one call — keep your whole portfolio's " +
-        "Page-indexing data fresh without naming each site. Runs sites sequentially, quota-aware per property. " +
-        "Resumable: call again to keep filling in pending URLs.",
-      inputSchema: {
-        maxUrlsPerSite: z
-          .number()
-          .int()
-          .min(1)
-          .max(2000)
+          .describe("Max URLs to inspect this run (per site). Default 100 (bounded by remaining quota)."),
+        allSites: z
+          .boolean()
           .optional()
-          .describe("Max URLs to inspect per site this run. Default 100."),
+          .describe("Refresh every accessible property instead of one (ignores siteUrl). Default false."),
       },
     },
-    async ({ maxUrlsPerSite }) => {
+    async ({ siteUrl, maxUrls, allSites }) => {
       try {
-        const gsc = await ctx.gsc();
-        const res = await gsc.sites.list();
-        const sites = (res.data.siteEntry ?? [])
-          .map((s) => s.siteUrl)
-          .filter((u): u is string => Boolean(u));
-        const results = [];
-        for (const siteUrl of sites) {
-          try {
-            results.push(await refreshCoverage(siteUrl, maxUrlsPerSite ?? 100));
-          } catch (e) {
-            results.push({ siteUrl, error: e instanceof Error ? e.message : String(e) });
+        if (allSites) {
+          const gsc = await ctx.gsc();
+          const res = await gsc.sites.list();
+          const sites = (res.data.siteEntry ?? []).map((s) => s.siteUrl).filter((u): u is string => Boolean(u));
+          const results = [];
+          for (const site of sites) {
+            try {
+              results.push(await refreshCoverage(site, maxUrls ?? 100));
+            } catch (e) {
+              results.push({ siteUrl: site, error: e instanceof Error ? e.message : String(e) });
+            }
           }
+          return ok({ sitesCrawled: results.length, results });
         }
-        return ok({ sitesCrawled: results.length, results });
+        const { siteUrl: resolved } = ctx.resolveSite(siteUrl);
+        return ok(await refreshCoverage(resolved, maxUrls ?? 100));
       } catch (e) {
         return fail(e);
       }

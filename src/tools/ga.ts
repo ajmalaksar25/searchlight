@@ -32,78 +32,41 @@ export const register: ToolModule = (server, ctx) => {
   );
 
   server.registerTool(
-    "ga_traffic",
-    {
-      title: "GA4 traffic by channel",
-      description:
-        "Where your visitors come from (Organic Search, Direct, Referral, Paid, Social…) over the last N days: " +
-        "sessions, users, views and engagement rate per channel. Answers 'is anyone coming, and from where'.",
-      inputSchema: {
-        propertyId: z.string().describe("GA4 property ID (digits only). Get it from ga_list_properties."),
-        days: z.number().int().min(1).max(365).optional().describe("Lookback window. Default 28."),
-      },
-    },
-    async ({ propertyId, days }) => {
-      try {
-        const r = await runReport(propertyId, {
-          days,
-          dimensions: ["sessionDefaultChannelGroup"],
-          metrics: ["sessions", "totalUsers", "screenPageViews", "engagementRate"],
-          orderByMetricDesc: "sessions",
-          limit: 20,
-        });
-        return ok(r);
-      } catch (e) {
-        return gaFail(e);
-      }
-    }
-  );
-
-  server.registerTool(
-    "ga_top_pages",
-    {
-      title: "GA4 top pages",
-      description: "Most-visited pages over the last N days (path, views, sessions, engagement).",
-      inputSchema: {
-        propertyId: z.string().describe("GA4 property ID (digits only)."),
-        days: z.number().int().min(1).max(365).optional().describe("Lookback window. Default 28."),
-        limit: z.number().int().min(1).max(500).optional().describe("Rows. Default 25."),
-      },
-    },
-    async ({ propertyId, days, limit }) => {
-      try {
-        const r = await runReport(propertyId, {
-          days,
-          dimensions: ["pagePath"],
-          metrics: ["screenPageViews", "sessions", "engagementRate"],
-          orderByMetricDesc: "screenPageViews",
-          limit: limit ?? 25,
-        });
-        return ok(r);
-      } catch (e) {
-        return gaFail(e);
-      }
-    }
-  );
-
-  server.registerTool(
     "ga_report",
     {
-      title: "GA4 custom report",
+      title: "GA4 report (traffic / top pages / custom)",
       description:
-        "Run an arbitrary GA4 report. Pick any GA4 dimensions and metrics (e.g. dimensions ['date'], metrics " +
-        "['sessions','totalUsers']). For advanced/custom analysis.",
+        "GA4 reporting. For quick cases pass preset 'traffic' (sessions/users/views/engagement by channel — " +
+        "'is anyone coming, and from where') or 'top_pages' (most-visited pages). For custom analysis pass your " +
+        "own metrics (and optional dimensions), e.g. metrics ['sessions','totalUsers'], dimensions ['date'].",
       inputSchema: {
-        propertyId: z.string().describe("GA4 property ID (digits only)."),
-        metrics: z.array(z.string()).describe("GA4 metric names, e.g. ['sessions','totalUsers','engagementRate']."),
+        propertyId: z.string().describe("GA4 property ID (digits only). Get it from ga_list_properties."),
+        preset: z
+          .enum(["traffic", "top_pages"])
+          .optional()
+          .describe("Shortcut that fills metrics+dimensions: 'traffic' = by channel, 'top_pages' = by page."),
+        metrics: z.array(z.string()).optional().describe("GA4 metric names. Required unless a preset is set."),
         dimensions: z.array(z.string()).optional().describe("GA4 dimension names, e.g. ['date','pagePath']."),
+        orderByMetricDesc: z.string().optional().describe("Sort by this metric, descending."),
         days: z.number().int().min(1).max(365).optional().describe("Lookback window. Default 28."),
         limit: z.number().int().min(1).max(1000).optional().describe("Rows. Default 100."),
       },
     },
-    async ({ propertyId, metrics, dimensions, days, limit }) => {
+    async ({ propertyId, preset, metrics, dimensions, orderByMetricDesc, days, limit }) => {
       try {
-        return ok(await runReport(propertyId, { days, dimensions, metrics, limit }));
+        if (preset === "traffic") {
+          dimensions ??= ["sessionDefaultChannelGroup"];
+          metrics ??= ["sessions", "totalUsers", "screenPageViews", "engagementRate"];
+          orderByMetricDesc ??= "sessions";
+          limit ??= 20;
+        } else if (preset === "top_pages") {
+          dimensions ??= ["pagePath"];
+          metrics ??= ["screenPageViews", "sessions", "engagementRate"];
+          orderByMetricDesc ??= "screenPageViews";
+          limit ??= 25;
+        }
+        if (!metrics?.length) return fail(new Error("Provide `metrics` (or a `preset`)."));
+        return ok(await runReport(propertyId, { days, dimensions, metrics, limit, orderByMetricDesc }));
       } catch (e) {
         return gaFail(e);
       }

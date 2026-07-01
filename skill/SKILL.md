@@ -47,7 +47,7 @@ Summarize their answers as a short plan and get a yes before executing.
 - For key pages: `audit_page <url>` → title/meta/canonical/H1/OG/schema/alt/content-depth + **GA tag presence**.
 - If a GA4 property exists but the tag is missing: `ga_measurement_id <site>` → **fetch the `G-XXXX` ID automatically** (don't ask the user to paste it). Only ask for it if no property matches the site and none is being created.
 - `page_speed <url>` → Core Web Vitals.
-- `ga_traffic` / `top_pages` / `find_opportunities` → is anyone arriving, and from where.
+- `ga_report` (preset `traffic`) / `query_search_analytics` (preset `top_pages`) / `find_opportunities` → is anyone arriving, and from where.
 
 Present findings as **plain-English, triaged** ("fix now: …, here's why, here's the fix"). Distinguish what to worry about vs what's normal (e.g. "Page with redirect" is usually fine). **If the command was `audit`, stop here:** give the triaged picture and ask whether to fix the things worth fixing (which continues into §3).
 

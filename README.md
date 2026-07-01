@@ -112,12 +112,17 @@ It always confirms before any provisioning, code edit, sitemap submit, or deploy
 ## Tools
 
 `auth_status`, `auth_login`, `list_sites`, `use_site`, `get_active_site`, `set_default_site`,
-`account_overview`, `gsc_deep_link`, `query_search_analytics`, `top_queries`, `top_pages`,
+`account_overview`, `gsc_deep_link`, `query_search_analytics` (presets: `top_queries`/`top_pages`),
 `find_opportunities`, `compare_periods`, `inspect_url`, `coverage_report`, `refresh_coverage`,
-`get_pages_in_bucket`, `diagnose_site`, `snapshot_baseline`, `list_snapshots`, `progress_report`,
-`ga_list_properties`, `ga_measurement_id`, `ga_traffic`, `ga_top_pages`, `ga_report`,
-`list_sitemaps`, `get_sitemap`. With `--write` / `--setup`: `submit_sitemap`, `delete_sitemap`,
-and the GA4 / verification provisioning tools.
+`crawl_site`, `site_audit`, `export_report`, `diagnose_site`, `audit_page`, `page_speed`,
+`snapshot_baseline`, `list_snapshots`, `progress_report`, `ga_list_properties`,
+`ga_measurement_id`, `ga_report` (presets: `traffic`/`top_pages`), `list_sitemaps`.
+With `--write` / `--setup`: `submit_sitemap`, `delete_sitemap`, and the GA4 / verification
+provisioning tools.
+
+**`crawl_site` → `site_audit` → `export_report`** crawl your live site directly (no Google
+scope, no quota), then produce a triaged, site-wide technical-SEO report (status/redirects/
+canonicals/orphans/link-graph/schema/hreflang) you can share as Markdown.
 
 **Coverage report** reconstructs the "Page indexing" report the GSC API won't export in bulk:
 it gathers candidate URLs from sitemaps and analytics, inspects them within the 2,000/day

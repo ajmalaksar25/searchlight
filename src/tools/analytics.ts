@@ -17,9 +17,21 @@ export const register: ToolModule = (server, ctx) => {
       title: "Query search analytics",
       description:
         "The core Search Console performance query. Returns clicks, impressions, CTR and average position, " +
-        "broken down by the dimensions you request, over a date range. Use top_queries / top_pages for quick cases.",
+        "broken down by the dimensions you request, over a date range. For quick cases pass preset " +
+        "'top_queries' or 'top_pages' with days — no need to set dimensions/dates yourself.",
       inputSchema: {
         siteUrl: siteUrlOptional,
+        preset: z
+          .enum(["top_queries", "top_pages"])
+          .optional()
+          .describe("Shortcut: 'top_queries' groups by query, 'top_pages' by page (both ranked by clicks). Sets dimensions for you."),
+        days: z
+          .number()
+          .int()
+          .min(1)
+          .max(480)
+          .optional()
+          .describe("Convenience lookback: sets the date range to the last N days. Ignored if startDate is given."),
         startDate: z.string().optional().describe("YYYY-MM-DD. Defaults to 28 days ago."),
         endDate: z
           .string()
@@ -28,7 +40,7 @@ export const register: ToolModule = (server, ctx) => {
         dimensions: z
           .array(z.enum(DIMENSIONS))
           .optional()
-          .describe("Group results by these. Omit for site-wide totals."),
+          .describe("Group results by these. Omit for site-wide totals (or use preset)."),
         type: z
           .enum(["web", "image", "video", "news", "discover", "googleNews"])
           .optional()
@@ -55,69 +67,27 @@ export const register: ToolModule = (server, ctx) => {
     async (args) => {
       try {
         const { siteUrl } = ctx.resolveSite(args.siteUrl);
-        const dims = (args.dimensions as string[]) ?? [];
-        const data = await runSearchAnalytics({ ...args, siteUrl });
+        let dims = (args.dimensions as string[]) ?? [];
+        if (dims.length === 0 && args.preset) dims = args.preset === "top_pages" ? ["page"] : ["query"];
+        const startDate = args.startDate ?? (args.days ? daysAgo(args.days + 2) : undefined);
+        const endDate = args.endDate ?? (args.days ? daysAgo(2) : undefined);
+        const data = await runSearchAnalytics({
+          siteUrl,
+          startDate,
+          endDate,
+          dimensions: dims.length ? (dims as (typeof DIMENSIONS)[number][]) : undefined,
+          type: args.type,
+          dimensionFilters: args.dimensionFilters,
+          rowLimit: args.rowLimit,
+          startRow: args.startRow,
+          aggregationType: args.aggregationType,
+          dataState: args.dataState,
+        });
         return ok({
           siteUrl,
           rowCount: data.rows?.length ?? 0,
           rows: rowsToObjects(dims, data.rows as AnalyticsRow[]),
         });
-      } catch (e) {
-        return fail(e);
-      }
-    }
-  );
-
-  server.registerTool(
-    "top_queries",
-    {
-      title: "Top queries",
-      description: "Quick view of the top search queries for a site over the last N days, ranked by clicks.",
-      inputSchema: {
-        siteUrl: siteUrlOptional,
-        days: z.number().int().min(1).max(480).optional().describe("Lookback window. Default 28."),
-        limit: z.number().int().min(1).max(5000).optional().describe("Rows to return. Default 25."),
-      },
-    },
-    async ({ siteUrl, days, limit }) => {
-      try {
-        const { siteUrl: resolved } = ctx.resolveSite(siteUrl);
-        const data = await runSearchAnalytics({
-          siteUrl: resolved,
-          startDate: daysAgo((days ?? 28) + 2),
-          endDate: daysAgo(2),
-          dimensions: ["query"],
-          rowLimit: limit ?? 25,
-        });
-        return ok(rowsToObjects(["query"], data.rows as AnalyticsRow[]));
-      } catch (e) {
-        return fail(e);
-      }
-    }
-  );
-
-  server.registerTool(
-    "top_pages",
-    {
-      title: "Top pages",
-      description: "Quick view of the top landing pages for a site over the last N days, ranked by clicks.",
-      inputSchema: {
-        siteUrl: siteUrlOptional,
-        days: z.number().int().min(1).max(480).optional().describe("Lookback window. Default 28."),
-        limit: z.number().int().min(1).max(5000).optional().describe("Rows to return. Default 25."),
-      },
-    },
-    async ({ siteUrl, days, limit }) => {
-      try {
-        const { siteUrl: resolved } = ctx.resolveSite(siteUrl);
-        const data = await runSearchAnalytics({
-          siteUrl: resolved,
-          startDate: daysAgo((days ?? 28) + 2),
-          endDate: daysAgo(2),
-          dimensions: ["page"],
-          rowLimit: limit ?? 25,
-        });
-        return ok(rowsToObjects(["page"], data.rows as AnalyticsRow[]));
       } catch (e) {
         return fail(e);
       }

@@ -7,39 +7,28 @@ export const register: ToolModule = (server, ctx) => {
   server.registerTool(
     "list_sitemaps",
     {
-      title: "List sitemaps",
+      title: "List sitemaps (or get one)",
       description:
-        "List all sitemaps submitted for a property, with processing status and error/warning counts.",
-      inputSchema: { siteUrl: siteUrlOptional },
-    },
-    async ({ siteUrl }) => {
-      try {
-        const { siteUrl: resolved } = ctx.resolveSite(siteUrl);
-        const gsc = await ctx.gsc();
-        const res = await gsc.sitemaps.list({ siteUrl: resolved });
-        return ok(res.data.sitemap ?? []);
-      } catch (e) {
-        return fail(e);
-      }
-    }
-  );
-
-  server.registerTool(
-    "get_sitemap",
-    {
-      title: "Get sitemap",
-      description: "Get detailed status for a single sitemap by its full feed URL.",
+        "List all sitemaps submitted for a property, with processing status and error/warning counts. Pass " +
+        "`feedpath` (a full sitemap URL) to get the detailed status for just that one sitemap instead.",
       inputSchema: {
         siteUrl: siteUrlOptional,
-        feedpath: z.string().describe("Full URL of the sitemap, e.g. https://example.com/sitemap.xml"),
+        feedpath: z
+          .string()
+          .optional()
+          .describe("Get detailed status for one sitemap by its full URL, e.g. https://example.com/sitemap.xml"),
       },
     },
     async ({ siteUrl, feedpath }) => {
       try {
         const { siteUrl: resolved } = ctx.resolveSite(siteUrl);
         const gsc = await ctx.gsc();
-        const res = await gsc.sitemaps.get({ siteUrl: resolved, feedpath });
-        return ok(res.data);
+        if (feedpath) {
+          const one = await gsc.sitemaps.get({ siteUrl: resolved, feedpath });
+          return ok(one.data);
+        }
+        const res = await gsc.sitemaps.list({ siteUrl: resolved });
+        return ok(res.data.sitemap ?? []);
       } catch (e) {
         return fail(e);
       }
