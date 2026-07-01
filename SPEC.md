@@ -242,7 +242,7 @@ Generated alongside `.json/.md`. Open it in a browser, screenshot it, share it. 
 
 ### 6.4 Data-format-for-Claude principles (enforced everywhere)
 - **Aggregate server-side.** Tools return digests, not raw rows.
-- **Cap samples.** Buckets carry ≤10 example URLs, not the full list; Claude drills down with `get_pages_in_bucket(state, startRow)`.
+- **Cap samples.** Buckets carry ≤10 example URLs, not the full list; Claude drills down with `coverage_report(state, startRow)`.
 - **Round numbers.** CTR 4 dp, position 1 dp.
 - **Pre-rank.** Opportunities and issues arrive sorted by score/severity so Claude reads the top, not the haystack.
 - **Drill-down on demand.** Big sets are paginated tools, never one mega-payload.
@@ -390,19 +390,21 @@ All tools return `content: [{ type: "text", text }]`. On error, same shape with 
 - **`gsc_deep_link`** — `{ siteUrl?, report: removals|manualActions|securityIssues|pageIndexing }`. Returns the exact GSC UI URL (for the API-less surfaces in §2).
 
 ### Search analytics (core)
-- **`query_search_analytics`** — general query. Inputs: `siteUrl` (req); `startDate`/`endDate` (default last 28d ending 2d ago); `dimensions` (subset of `query|page|country|device|searchAppearance|date`); `type` (`web|image|video|news|discover|googleNews`); `dimensionFilters` (`[{ dimension, operator?, expression }]`, operators `equals|notEquals|contains|notContains|includingRegex|excludingRegex`, AND-combined); `rowLimit` (1–25000, default 1000); `startRow`; `aggregationType` (`auto|byPage|byProperty`); `dataState` (`final|all`). Returns `{ rowCount, rows }` flattened.
-- **`top_queries`** — `{ siteUrl, days?=28, limit?=25 }`.
-- **`top_pages`** — `{ siteUrl, days?=28, limit?=25 }`.
+- **`query_search_analytics`** — the single search-analytics tool (`top_queries`/`top_pages` are now its `preset`). Inputs: `siteUrl` (optional — §11 resolution); `preset` (`top_queries|top_pages`, sets dimensions for you); `days` (convenience lookback, ignored if `startDate` given); `startDate`/`endDate` (default last 28d ending 2d ago); `dimensions` (subset of `query|page|country|device|searchAppearance|date`); `type` (`web|image|video|news|discover|googleNews`); `dimensionFilters` (`[{ dimension, operator?, expression }]`, operators `equals|notEquals|contains|notContains|includingRegex|excludingRegex`, AND-combined); `rowLimit` (1–25000, default 1000); `startRow`; `aggregationType` (`auto|byPage|byProperty`); `dataState` (`final|all`). Returns `{ rowCount, rows }` flattened.
 
 ### Insight tools
 - **`find_opportunities`** — `{ siteUrl, dimension?=query, days?=90, minImpressions?=50, limit?=25 }`. Flags **striking distance** (avg position 5–20, score `impressions*(21-position)`) and **low CTR on page one** (`position<=10 && ctr<0.02 && impressions>=2*minImpressions`, `+impressions*5`). Returns ranked rows with `opportunityScore`, `reasons[]`, and a "what to do" note.
 - **`compare_periods`** — `{ siteUrl, dimension?=query, days?=28, limit?=10 }`. Last N vs preceding N days: `{ windows, totals, gainers[], losers[] }`. Two queries in parallel.
 
 ### Coverage / indexing (§7)
-- **`coverage_report`** — `{ siteUrl }`. Bucketed summary from cache + freshness + quota status.
-- **`refresh_coverage`** — `{ siteUrl, maxUrls? }`. Advance the crawl within today's quota; report progress.
-- **`get_pages_in_bucket`** — `{ siteUrl, state, limit?=50, startRow?=0 }`. Drill into a bucket.
+- **`coverage_report`** — `{ siteUrl, state?, limit?=50, startRow?=0 }`. Bucketed summary from cache + freshness + quota status. Pass `state` (an exact `coverageState`) to drill into one bucket and list its URLs, paginated (absorbs the old `get_pages_in_bucket`).
+- **`refresh_coverage`** — `{ siteUrl, maxUrls?, allSites? }`. Advance the crawl within today's quota; report progress. `allSites: true` refreshes every accessible property in one call (absorbs the old `refresh_all_coverage`).
 - **`inspect_url`** — `{ siteUrl, inspectionUrl, languageCode?=en-US }`. Single-URL inspect (also populates cache). Returns `inspectionResult`.
+
+### Site crawl & audit (§9) — direct-fetch, no Google scope or quota
+- **`crawl_site`** — `{ siteUrl, maxPages?=150, reset? }`. Direct-fetch crawl of the live site: seeds from sitemap + robots.txt + homepage, follows internal links, capturing each URL's status, full redirect chain, `X-Robots-Tag`, canonical/meta-robots/title, hreflang, schema validity, and the internal-link graph. Bounded + resumable; robots-obeying. Run before `site_audit`.
+- **`site_audit`** — `{ siteUrl }`. Turns the crawl into a triaged, site-wide report: status inventory (4xx/5xx), redirect chains/loops + 301-vs-302 guidance, noindex, canonical health, dup/param clustering, schema validity, hreflang reciprocity, and orphan detection — ranked by severity × affected-page count.
+- **`export_report`** — `{ siteUrl }`. Formats `site_audit` into one copy-paste Markdown report (grade, metrics, findings with fix + example URLs).
 
 ### On-page audit (§9)
 - **`audit_page`** — `{ url }`. Full on-page audit with findings + suggested edits + per-category scores + platform previews.
@@ -410,13 +412,19 @@ All tools return `content: [{ type: "text", text }]`. On error, same shape with 
 ### Page speed (§10)
 - **`page_speed`** — `{ url, strategy?=mobile }`. PSI Lighthouse + CrUX field CWV.
 
-### Scores & report (§6, §8)
-- **`score_site`** — `{ siteUrl }`. `{ seo, eeat, geo, whatToFix[] }`.
-- **`get_site_report`** — `{ siteUrl }`. The full `report.json` digest — the primary "document" for Claude.
+### Diagnosis, scores & baselines (§6, §8)
+- **`diagnose_site`** — `{ siteUrl }`. Plain-English triaged health (score + grade; fix-now / worth-improving / looks-scary-but-fine / working), fusing cached coverage, live sitemap/robots checks, 28-day traffic, AI-crawler/llms.txt visibility, and — when a crawl exists — cross-source reconciliation (sitemap × robots × crawl × GSC).
+- **`snapshot_baseline`** — `{ siteUrl }`. Freeze today's diagnosis as a dated snapshot so a later run can prove before→after. Same-day re-run overwrites.
+- **`list_snapshots`** — `{ siteUrl }`. Dates (oldest→newest) with a saved snapshot.
+- **`progress_report`** — `{ siteUrl, from?, to? }`. Diff two snapshots: health/grade movement, indexed/traffic deltas, and issues RESOLVED / NEW / PERSIST.
+
+### Google Analytics 4 (§22)
+- **`ga_list_properties`** — no input. GA4 properties you can access, with website URLs.
+- **`ga_measurement_id`** — `{ siteUrl?, propertyId? }`. The gtag Measurement ID(s) (`G-XXXX`) of an existing property (by id or auto-matched from the site) + a ready-to-paste snippet.
+- **`ga_report`** — `{ propertyId, preset?, metrics?, dimensions?, orderByMetricDesc?, days?, limit? }`. GA4 reporting; preset `traffic` (by channel) or `top_pages` (by page), or your own metrics/dimensions.
 
 ### Sitemaps (read)
-- **`list_sitemaps`** — `{ siteUrl }`. Array with status + error/warning counts.
-- **`get_sitemap`** — `{ siteUrl, feedpath }`.
+- **`list_sitemaps`** — `{ siteUrl, feedpath? }`. Array with status + error/warning counts; pass `feedpath` (a full sitemap URL) for the detailed status of just that one (absorbs the old `get_sitemap`).
 
 ### Sitemaps (write — only when `SEARCHLIGHT_ENABLE_WRITE`)
 - **`submit_sitemap`** — `{ siteUrl, feedpath }`.
@@ -522,7 +530,7 @@ Confirm the final npm name/scope before publishing (`@ajmalaksar/searchlight` is
 1. **Build**: `npm run build` compiles clean with `strict: true`; dashboard builds to `dist/dashboard`.
 2. **Auth happy path**: `login` opens browser, callback succeeds, `token.json` has a `refresh_token`.
 3. **Refresh**: delete the access token (keep refresh), start server, confirm a call works and the file is rewritten.
-4. **Tool smoke** (MCP Inspector): list tools; call `auth_status`, `list_sites`, `top_queries`, `find_opportunities`, `audit_page`, `page_speed`, `coverage_report`, `get_site_report` against a real property.
+4. **Tool smoke** (MCP Inspector): list tools; call `auth_status`, `list_sites`, `query_search_analytics`, `find_opportunities`, `audit_page`, `page_speed`, `coverage_report`, `crawl_site`, `site_audit`, `diagnose_site` against a real property.
 5. **Coverage/quota**: `refresh_coverage` respects 2k/day, persists `quota.json`, resumes next run, buckets correctly.
 6. **Audit correctness**: `audit_page` on a page with a missing meta/OG image reports it with a suggested edit; previews render.
 7. **Multi-site**: alias resolution, `set_default_site`, `account_overview` aggregates.
@@ -539,7 +547,7 @@ Confirm the final npm name/scope before publishing (`@ajmalaksar/searchlight` is
 Each phase is a standalone, demoable artifact.
 
 1. **v1 MCP** — analytics, sitemaps, inspection, `find_opportunities`, `compare_periods`, auth (+ in-conversation `auth_login`), `list_sites`, `.mcpb` / `claude mcp add` install. *(Largely the existing scaffold.)* Demo: install + "log me in" + LLM doing SEO triage in plain English.
-2. **Cache + coverage reconstruction + `get_site_report`** — the "document" and the indexing buckets the user asked for. Demo: "here's every page Google won't index, and why."
+2. **Cache + coverage reconstruction + `diagnose_site`/`site_audit`** — the "document" and the indexing buckets the user asked for. Demo: "here's every page Google won't index, and why."
 3. **`audit_page` (full) + `page_speed`** — the how-to-fix gap + Core Web Vitals. Demo: OG/preview fixes + LCP/INP/CLS.
 4. **Scores + `gsc-seo` skill** — SEO/E‑E‑A‑T/GEO, delegating to `ai-seo`/`seo-content-writer`. Demo: one-command site audit with a ranked fix list.
 5. **Dashboard** — static `report.html` → MCP Apps widgets → Vite SPA with list/switch/act.
@@ -556,7 +564,7 @@ Each phase is a standalone, demoable artifact.
 - **Indexing API**: officially JobPosting/BroadcastEvent only, 200/day. If ever offered, gate it behind an explicit flag and a loud caveat; do not use it for general pages by default.
 - **Data freshness**: expose `dataState: "all"`; default to finalized.
 - **Page fetch failures** (`audit_page`): timeouts, JS-rendered pages, bot blocks → return a clear partial result, not a crash. Note when a page is JS-heavy and the static fetch may miss content.
-- **Token discipline**: insight/coverage tools may analyze up to 25k rows locally but must return digests; pagination via `startRow`/`get_pages_in_bucket`.
+- **Token discipline**: insight/coverage tools may analyze up to 25k rows locally but must return digests; pagination via `startRow`/`coverage_report(state, …)`.
 - **MCP going stateless**: the protocol is drifting away from server-held sessions. Keep the active site as our *own* in-process variable with a persisted `config.json` fallback, so `use_site` keeps working regardless of protocol-level session semantics. If a future HTTP/multi-session transport is added, key the active site by session id rather than a module global.
 - **Dashboard weight**: keep Vite/React as devDeps; ship prebuilt; never pull a build toolchain at `npx` runtime.
 - **Scope change**: switching `SEARCHLIGHT_ENABLE_WRITE` requires re-login.
