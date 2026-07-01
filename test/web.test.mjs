@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { robotsMatchLen, robotsBlocks, normKey, extractLocs } from "../dist/util/web.js";
+import { robotsMatchLen, robotsBlocks, normKey, extractLocs, parseRobotsGroups } from "../dist/util/web.js";
 
 test("robotsMatchLen handles wildcards and anchors (the /*.pdf trap)", () => {
   assert.ok(robotsMatchLen("/a/b.pdf", "/*.pdf") >= 0, "/*.pdf should match a .pdf path");
@@ -30,6 +30,14 @@ test("normKey normalizes host + trailing slash + fragment, keeps query", () => {
   assert.equal(normKey("https://example.com/"), "https://example.com/", "root slash kept");
   assert.equal(normKey("https://example.com/a?b=1"), "https://example.com/a?b=1", "query kept");
   assert.equal(normKey("/rel", "https://example.com/base"), "https://example.com/rel", "resolves relative");
+});
+
+test("parseRobotsGroups keeps per-bot groups (for AI-crawler checks)", () => {
+  const txt = "User-agent: *\nDisallow: /admin\n\nUser-agent: GPTBot\nDisallow: /\n\nUser-agent: CCBot\nAllow: /\n";
+  const g = parseRobotsGroups(txt);
+  assert.ok(robotsBlocks("/", g["gptbot"].disallow, g["gptbot"].allow), "GPTBot blocked from root");
+  assert.equal(robotsBlocks("/", g["*"].disallow, g["*"].allow), false, "* not blocked from root");
+  assert.equal(robotsBlocks("/anything", g["ccbot"].disallow, g["ccbot"].allow), false, "CCBot allowed");
 });
 
 test("extractLocs pulls and decodes sitemap <loc> URLs", () => {

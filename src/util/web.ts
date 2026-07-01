@@ -58,6 +58,41 @@ export function robotsMatchLen(path: string, rule: string): number {
   return core.replace(/\*/g, "").length;
 }
 
+/**
+ * Parse robots.txt into per-user-agent groups (lowercased UA -> rules). Unlike the
+ * `*`-only parseRobots, this keeps every group so specific bots (e.g. GPTBot) can
+ * be checked. Consecutive User-agent lines share the following directive block.
+ */
+export function parseRobotsGroups(text: string): Record<string, { disallow: string[]; allow: string[] }> {
+  const groups: Record<string, { disallow: string[]; allow: string[] }> = {};
+  let current: string[] = [];
+  let sawDirective = false;
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.replace(/#.*/, "").trim();
+    if (!line) continue;
+    const idx = line.indexOf(":");
+    if (idx < 0) continue;
+    const field = line.slice(0, idx).trim().toLowerCase();
+    const val = line.slice(idx + 1).trim();
+    if (field === "user-agent") {
+      if (sawDirective) {
+        current = [];
+        sawDirective = false;
+      }
+      const ua = val.toLowerCase();
+      current.push(ua);
+      groups[ua] ??= { disallow: [], allow: [] };
+    } else if (field === "disallow" && current.length) {
+      sawDirective = true;
+      if (val) for (const ua of current) groups[ua].disallow.push(val);
+    } else if (field === "allow" && current.length) {
+      sawDirective = true;
+      if (val) for (const ua of current) groups[ua].allow.push(val);
+    }
+  }
+  return groups;
+}
+
 /** True if robots.txt blocks `path`. Longest-match wins; Allow wins ties (Google's rule). */
 export function robotsBlocks(path: string, disallow: string[], allow: string[] = []): boolean {
   let d = -1;

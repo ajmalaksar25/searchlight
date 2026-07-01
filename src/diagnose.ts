@@ -1,7 +1,7 @@
 import { gscClient, runSearchAnalytics, daysAgo, rowsToObjects, type AnalyticsRow } from "./gsc.js";
 import { loadCoverage, bucketCoverage } from "./coverage.js";
 import { loadCrawl, parseRobots } from "./crawl.js";
-import { extractLocs, normKey, robotsBlocks } from "./util/web.js";
+import { extractLocs, normKey, robotsBlocks, parseRobotsGroups } from "./util/web.js";
 import { pagespeedApiKey } from "./keys.js";
 
 /**
@@ -188,6 +188,7 @@ export async function diagnoseSite(siteUrl: string): Promise<Diagnosis> {
   let sitemapRedirects = false;
   const sitemapLocs: string[] = [];
   const robotsRules: Record<string, { disallow: string[]; allow: string[] }> = {};
+  const robotsBodies: Record<string, string> = {};
   for (const host of hosts) {
     const sm = await probe(`https://${host}/sitemap.xml`);
     if (sm.status === 200 && (sm.locCount ?? 0) > 0) sitemapOk = true;
@@ -197,6 +198,7 @@ export async function diagnoseSite(siteUrl: string): Promise<Diagnosis> {
     if (rb.status === 200 && rb.body) {
       const pr = parseRobots(rb.body);
       robotsRules[host] = { disallow: pr.disallow, allow: pr.allow };
+      robotsBodies[host] = rb.body;
     }
     if ([400, 401, 403].includes(rb.status) || rb.status >= 500) {
       findings.push({
@@ -325,6 +327,51 @@ export async function diagnoseSite(siteUrl: string): Promise<Diagnosis> {
         whatToDo: "Restore the pages (or remove the noindex); if intentionally gone, 301 them to a relevant live page.",
         count: indexedBroken.length,
         sampleUrls: indexedBroken.slice(0, 10).map((c) => c.url),
+      });
+    }
+  }
+
+  // --- AI visibility: llms.txt + AI-crawler access ---
+  const primaryHost = hosts[0];
+  if (primaryHost) {
+    const AI_BOTS: Record<string, string> = {
+      gptbot: "OpenAI GPTBot",
+      "oai-searchbot": "OpenAI SearchBot",
+      claudebot: "Anthropic ClaudeBot",
+      "anthropic-ai": "Anthropic",
+      "google-extended": "Google Gemini",
+      perplexitybot: "Perplexity",
+      ccbot: "Common Crawl",
+      bytespider: "ByteDance",
+      "applebot-extended": "Apple AI",
+    };
+    const body = robotsBodies[primaryHost];
+    if (body) {
+      const groups = parseRobotsGroups(body);
+      const blocked: string[] = [];
+      for (const [ua, name] of Object.entries(AI_BOTS)) {
+        const g = groups[ua];
+        if (g && robotsBlocks("/", g.disallow, g.allow)) blocked.push(name);
+      }
+      if (blocked.length) {
+        findings.push({
+          id: "ai:blocked-crawlers",
+          severity: "info",
+          title: `robots.txt blocks ${blocked.length} AI crawler${blocked.length > 1 ? "s" : ""}`,
+          why: `${blocked.join(", ")} ${blocked.length > 1 ? "are" : "is"} disallowed — that keeps you out of those AI answers and citations. Fine if deliberate, a visibility loss if not.`,
+          whatToDo: "To appear in AI answers, remove the Disallow for these bots; if you're deliberately protecting content, this is working as intended.",
+          count: blocked.length,
+        });
+      }
+    }
+    const llms = await probe(`https://${primaryHost}/llms.txt`);
+    if (llms.status !== 200) {
+      findings.push({
+        id: "ai:llms-txt",
+        severity: "info",
+        title: "No llms.txt",
+        why: "llms.txt is an emerging convention that points AI assistants at the pages that matter and how to read your site — a low-cost signal for AI visibility.",
+        whatToDo: "Optionally add /llms.txt listing your key pages and a short site description (see llmstxt.org).",
       });
     }
   }
