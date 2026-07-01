@@ -24,6 +24,13 @@ test("analyzeHtml: complete schema produces no issues", () => {
   assert.ok(sig.jsonLdTypes.includes("Article"));
 });
 
+test("analyzeHtml flags a consent banner (so 'no analytics' isn't a false negative)", () => {
+  const withCmp = analyzeHtml('<html><head><script src="https://cdn.cookiebot.com/uc.js"></script></head><body></body></html>', { url: "https://x.com/" });
+  assert.equal(withCmp.consentHint, true);
+  const plain = analyzeHtml("<html><head></head><body>hi</body></html>", { url: "https://x.com/" });
+  assert.equal(plain.consentHint, false);
+});
+
 test("fixFor emits framework-aware snippets", () => {
   assert.match(fixFor("canonical:missing", "Next.js"), /alternates:\s*\{\s*canonical/);
   assert.match(fixFor("canonical:missing", "Astro"), /Astro\.url\.href/);

@@ -92,6 +92,7 @@ export interface PageSignals {
   htmlLang: string | null;
   framework: string | null;
   analytics: { ga4: string | null; gtm: string | null; universal: string | null };
+  consentHint: boolean; // a consent banner / CMP was detected in the HTML
   openGraph: Record<string, string | null>;
   twitter: Record<string, string | null>;
   jsonLdTypes: string[];
@@ -118,6 +119,10 @@ export function analyzeHtml(
   const $ = cheerio.load(html);
   const analytics = detectAnalytics(html);
   const framework = detectFramework(html, $);
+  // A consent banner / CMP means analytics may be consent-gated (loads only after
+  // the user accepts), so a static-HTML "no tag" reading can be a false negative.
+  const consentHint =
+    /cookiebot|onetrust|cookieyes|termly|iubenda|osano|usercentrics|klaro|cookieconsent|cookie-consent|__tcfapi|gtag\(['"]consent|clarity\.ms|consentmanager/i.test(html);
 
   const title = ($("title").first().text() || "").trim() || null;
   const metaDescription = $('meta[name="description"]').attr("content")?.trim() || null;
@@ -216,6 +221,7 @@ export function analyzeHtml(
     htmlLang,
     framework,
     analytics,
+    consentHint,
     openGraph,
     twitter,
     jsonLdTypes: [...new Set(jsonLdTypes)],
@@ -397,7 +403,11 @@ export async function auditPage(rawUrl: string): Promise<AuditResult> {
 
   // --- analytics tag ---
   if (!sig.analytics.ga4 && !sig.analytics.gtm && !sig.analytics.universal) {
-    add("info", "analytics:missing", "No Google Analytics tag found", "This page isn't being measured — you can't see its traffic or behaviour in Analytics.", "Add the GA4 tag (gtag.js) so this page is tracked.");
+    if (sig.consentHint) {
+      add("info", "analytics:consent-gated", "No analytics tag in the initial HTML (a consent banner was detected)", "A consent/cookie banner is present, so a GA4 tag may load only after the visitor accepts — which a static HTML check like this can't see. It may already be working.", "Verify in a browser: accept the banner, then check for a gtag/collect request in the Network tab (or Tag Assistant). Only add a tag if none fires.");
+    } else {
+      add("info", "analytics:missing", "No Google Analytics tag found in the HTML", "No GA4/GTM tag is in the served HTML. If you inject it via GTM or client-side JS it may still fire — a static check can't confirm that.", "If the page truly has no analytics, add the GA4 tag (gtag.js). Otherwise verify it fires in the browser (Network tab / Tag Assistant).");
+    }
   }
 
   // --- attach framework-aware fix snippets (emitted as data for any harness) ---
